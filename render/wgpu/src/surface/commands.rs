@@ -646,7 +646,8 @@ impl<'encoder, 'global: 'encoder> WgpuCommandHandler<'encoder, 'global> {
     /// Every complex blend will be its own item, but every other draw will be chunked together
     fn chunk_blends(&mut self, commands: CommandList) -> Vec<Chunk> {
         commands.execute(self);
-        self.pending_layers = 0; // skua #17: drawn by the caller next
+        crate::backend::skua_live_layers(-(self.pending_layers as i64)); // skua #17: drawn by the caller next
+        self.pending_layers = 0;
 
         let current = mem::take(&mut self.current);
         let mut result = mem::take(&mut self.result);
@@ -692,6 +693,7 @@ impl<'encoder, 'global: 'encoder> WgpuCommandHandler<'encoder, 'global> {
                 ),
             });
         }
+        crate::backend::SKUA_RC_EARLY_DRAWS.fetch_add(1, Ordering::Relaxed);
         for chunk in result {
             early.surface.draw_chunk(
                 chunk,
@@ -705,6 +707,7 @@ impl<'encoder, 'global: 'encoder> WgpuCommandHandler<'encoder, 'global> {
                 self.texture_pool,
             );
         }
+        crate::backend::skua_live_layers(-(self.pending_layers as i64));
         self.pending_layers = 0;
     }
 
@@ -783,6 +786,7 @@ impl<'encoder, 'global: 'encoder> WgpuCommandHandler<'encoder, 'global> {
 
 impl CommandHandler for WgpuCommandHandler<'_, '_> {
     fn blend(&mut self, commands: CommandList, blend_mode: RenderBlendMode) {
+        crate::backend::skua_count_blend(&blend_mode);
         let surface = Surface::new(
             self.descriptors,
             self.quality,
@@ -863,6 +867,7 @@ impl CommandHandler for WgpuCommandHandler<'_, '_> {
                 );
                 // skua #17
                 self.pending_layers += 1;
+                crate::backend::skua_live_layers(1);
                 let limit = layer_flush();
                 if limit > 0 && self.pending_layers >= limit {
                     self.draw_early();
@@ -896,6 +901,7 @@ impl CommandHandler for WgpuCommandHandler<'_, '_> {
                 self.needs_stencil = self.num_masks > 0;
                 // skua #17
                 self.pending_layers += 1;
+                crate::backend::skua_live_layers(1);
                 let limit = layer_flush();
                 if limit > 0 && self.pending_layers >= limit {
                     self.draw_early();
@@ -1051,6 +1057,7 @@ impl CommandHandler for WgpuCommandHandler<'_, '_> {
     }
 
     fn render_alpha_mask(&mut self, maskee_commands: CommandList, mask_commands: CommandList) {
+        crate::backend::SKUA_RC_ALPHA_MASKS.fetch_add(1, Ordering::Relaxed);
         let surface = Surface::new(
             self.descriptors,
             self.quality,

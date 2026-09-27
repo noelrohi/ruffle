@@ -33,7 +33,7 @@ use std::any::Any;
 use std::borrow::Cow;
 use std::num::NonZeroU32;
 use std::sync::Arc;
-use std::sync::atomic::{AtomicU32, Ordering};
+use std::sync::atomic::{AtomicU32, AtomicU64, Ordering};
 use swf::Color;
 use tracing::instrument;
 use wgpu::SubmissionIndex;
@@ -598,8 +598,15 @@ impl<T: RenderTarget + 'static> RenderBackend for WgpuRenderBackend<T> {
             return;
         };
 
+        SKUA_RC_FRAMES.fetch_add(1, Ordering::Relaxed); // skua #17
         for entry in cache_entries {
             let texture = as_texture(&entry.handle);
+            SKUA_RC_CACHE_ENTRIES.fetch_add(1, Ordering::Relaxed);
+            SKUA_RC_CACHE_FILTERS.fetch_add(entry.filters.len() as u64, Ordering::Relaxed);
+            SKUA_RC_CACHE_PX.fetch_add(
+                texture.texture.width() as u64 * texture.texture.height() as u64,
+                Ordering::Relaxed,
+            );
             let surface = Surface::new(
                 &self.descriptors,
                 self.surface.quality(),
@@ -830,6 +837,7 @@ impl<T: RenderTarget + 'static> RenderBackend for WgpuRenderBackend<T> {
         quality: StageQuality,
         bounds: PixelRegion,
     ) -> Option<Box<dyn SyncHandle>> {
+        SKUA_RC_OFFSCREEN.fetch_add(1, Ordering::Relaxed); // skua #17
         let texture = as_texture(&handle);
 
         let extent = wgpu::Extent3d {
@@ -1311,6 +1319,69 @@ pub static SKUA_PASS_BUDGET_FLUSHES: std::sync::atomic::AtomicU64 =
 
 pub(crate) fn note_render_pass() {
     PASSES_SINCE_SUBMIT.fetch_add(1, Ordering::Relaxed);
+    SKUA_RC_PASSES.fetch_add(1, Ordering::Relaxed);
+}
+
+// skua #17 instrumentation: what the frames since the last `skua_render_census` drew.
+pub static SKUA_RC_PASSES: AtomicU64 = AtomicU64::new(0);
+pub static SKUA_RC_FRAMES: AtomicU64 = AtomicU64::new(0);
+pub static SKUA_RC_CACHE_ENTRIES: AtomicU64 = AtomicU64::new(0);
+pub static SKUA_RC_CACHE_FILTERS: AtomicU64 = AtomicU64::new(0);
+pub static SKUA_RC_CACHE_PX: AtomicU64 = AtomicU64::new(0);
+pub static SKUA_RC_BLEND_LAYER: AtomicU64 = AtomicU64::new(0);
+pub static SKUA_RC_BLEND_TRIVIAL: AtomicU64 = AtomicU64::new(0);
+pub static SKUA_RC_BLEND_COMPLEX: AtomicU64 = AtomicU64::new(0);
+pub static SKUA_RC_BLEND_SHADER: AtomicU64 = AtomicU64::new(0);
+pub static SKUA_RC_ALPHA_MASKS: AtomicU64 = AtomicU64::new(0);
+pub static SKUA_RC_EARLY_DRAWS: AtomicU64 = AtomicU64::new(0);
+pub static SKUA_RC_POOL_ALLOCS: AtomicU64 = AtomicU64::new(0);
+pub static SKUA_RC_OFFSCREEN: AtomicU64 = AtomicU64::new(0);
+static SKUA_RC_LIVE_LAYERS: std::sync::atomic::AtomicI64 = std::sync::atomic::AtomicI64::new(0);
+static SKUA_RC_LIVE_LAYERS_MAX: std::sync::atomic::AtomicI64 = std::sync::atomic::AtomicI64::new(0);
+
+pub(crate) fn skua_live_layers(delta: i64) {
+    let v = SKUA_RC_LIVE_LAYERS.fetch_add(delta, Ordering::Relaxed) + delta;
+    SKUA_RC_LIVE_LAYERS_MAX.fetch_max(v, Ordering::Relaxed);
+}
+
+pub(crate) fn skua_count_blend(mode: &ruffle_render::commands::RenderBlendMode) {
+    use ruffle_render::commands::RenderBlendMode;
+    let c = match mode {
+        RenderBlendMode::Builtin(swf::BlendMode::Layer) => &SKUA_RC_BLEND_LAYER,
+        RenderBlendMode::Builtin(m) => {
+            match crate::blend::BlendType::from(RenderBlendMode::Builtin(*m)) {
+                crate::blend::BlendType::Trivial(_) => &SKUA_RC_BLEND_TRIVIAL,
+                _ => &SKUA_RC_BLEND_COMPLEX,
+            }
+        }
+        RenderBlendMode::Shader(_) => &SKUA_RC_BLEND_SHADER,
+    };
+    c.fetch_add(1, Ordering::Relaxed);
+}
+
+/// JSON of the counters above (per-frame averages where it makes sense), then resets them.
+pub fn skua_render_census() -> String {
+    let t = |a: &AtomicU64| a.swap(0, Ordering::Relaxed);
+    let frames = t(&SKUA_RC_FRAMES);
+    let live_max = SKUA_RC_LIVE_LAYERS_MAX.swap(0, Ordering::Relaxed);
+    format!(
+        "{{\"frames\":{frames},\"passes\":{},\"cacheEntries\":{},\"cacheFilters\":{},\"cacheMpx\":{:.1},\"blendLayer\":{},\"blendTrivial\":{},\"blendComplex\":{},\"blendShader\":{},\"alphaMasks\":{},\"earlyDraws\":{},\"poolAllocs\":{},\"offscreenDraws\":{},\"liveLayersMax\":{live_max},\"layerFlush\":{},\"passBudget\":{},\"maxInFlight\":{}}}",
+        t(&SKUA_RC_PASSES),
+        t(&SKUA_RC_CACHE_ENTRIES),
+        t(&SKUA_RC_CACHE_FILTERS),
+        t(&SKUA_RC_CACHE_PX) as f64 / 1e6,
+        t(&SKUA_RC_BLEND_LAYER),
+        t(&SKUA_RC_BLEND_TRIVIAL),
+        t(&SKUA_RC_BLEND_COMPLEX),
+        t(&SKUA_RC_BLEND_SHADER),
+        t(&SKUA_RC_ALPHA_MASKS),
+        t(&SKUA_RC_EARLY_DRAWS),
+        t(&SKUA_RC_POOL_ALLOCS),
+        t(&SKUA_RC_OFFSCREEN),
+        crate::surface::layer_flush(),
+        max_passes_per_submit(),
+        max_in_flight(),
+    )
 }
 
 /// Most passes to record before submitting mid-frame. Each pass costs 3 backend command

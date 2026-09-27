@@ -92,6 +92,8 @@ impl TexturePool {
                 None
             };
             BufferPool::new(Box::new(move |descriptors, _description| {
+                crate::backend::SKUA_RC_POOL_ALLOCS
+                    .fetch_add(1, std::sync::atomic::Ordering::Relaxed); // skua #17
                 let texture = descriptors.device.create_texture(&wgpu::TextureDescriptor {
                     label: label.as_deref(),
                     size,
