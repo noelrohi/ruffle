@@ -1305,6 +1305,10 @@ static PASSES_SINCE_SUBMIT: AtomicU32 = AtomicU32::new(0);
 /// skua #17: layers a surface collects before drawing them early (0 = upstream behaviour).
 pub use crate::surface::{layer_flush, set_layer_flush};
 
+/// skua #14 instrumentation: submissions made mid-frame because the pass budget was reached.
+pub static SKUA_PASS_BUDGET_FLUSHES: std::sync::atomic::AtomicU64 =
+    std::sync::atomic::AtomicU64::new(0);
+
 pub(crate) fn note_render_pass() {
     PASSES_SINCE_SUBMIT.fetch_add(1, Ordering::Relaxed);
 }
@@ -1333,6 +1337,7 @@ pub(crate) fn flush_if_over_pass_budget(
     if PASSES_SINCE_SUBMIT.load(Ordering::Relaxed) < max_passes_per_submit() {
         return;
     }
+    SKUA_PASS_BUDGET_FLUSHES.fetch_add(1, Ordering::Relaxed);
     submit_encoder(descriptors, staging_belt, encoder);
 }
 
