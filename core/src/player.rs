@@ -2074,6 +2074,7 @@ impl Player {
 
     #[instrument(level = "debug", skip_all)]
     pub fn run_frame(&mut self) {
+        SKUA_FRAMES_RUN.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
         let frame_time = self.frame_time(750_000_000.0);
         let frame_time = Duration::from_nanos(frame_time as u64);
         let (mut execution_limit, may_execute_while_streaming) = match self.load_behavior {
@@ -3485,3 +3486,6 @@ pub enum PlayerMode {
     /// Represents the debug version of Flash Player, i.e. flashplayerdebugger.
     Debug,
 }
+
+/// skua #6 instrumentation: number of `run_frame` calls (real Flash frames executed).
+pub static SKUA_FRAMES_RUN: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
