@@ -2666,6 +2666,116 @@ impl Player {
         out.join("\n")
     }
 
+    /// skua #13 census: the shortest strong-reference path from the arena root to the oldest live
+    /// AVM2 object of AS3 class `class`. Call right after `skua_full_gc`.
+    pub fn skua_retainers(&self, class: &str, _depth: usize) -> String {
+        use std::collections::{HashMap, HashSet};
+        let arena = self.gc_arena.borrow();
+        let is_script = |ty: &str| {
+            ty.starts_with("ruffle_core::avm2::object::script_object::ScriptObjectData<")
+        };
+        let is_stage =
+            |ty: &str| ty.starts_with("ruffle_core::avm2::object::stage_object::StageObjectData<");
+        let name_of = |ty: &str, p: usize| -> String {
+            unsafe {
+                if is_script(ty) {
+                    format!(
+                        "as3:{}",
+                        crate::avm2::object::skua_class_name(
+                            &*(p as *const crate::avm2::object::SkuaScriptObjectData<'_>)
+                        )
+                    )
+                } else if is_stage(ty) {
+                    format!(
+                        "as3:[display] {}",
+                        crate::avm2::object::skua_stage_class_name(
+                            &*(p as *const crate::avm2::object::SkuaStageObjectData<'_>)
+                        )
+                    )
+                } else {
+                    let t = ty.split('<').next().unwrap_or(ty);
+                    t.rsplit("::").next().unwrap_or(t).to_string()
+                }
+            }
+        };
+        let mut types: HashMap<usize, &'static str> = HashMap::new();
+        let mut held_by: HashMap<usize, usize> = HashMap::new();
+        let mut found: Vec<usize> = Vec::new();
+        arena.skua_edges(&mut |ty, p, _| {
+            let p = p as usize;
+            if is_stage(ty)
+                && unsafe {
+                    crate::avm2::object::skua_stage_class_name(
+                        &*(p as *const crate::avm2::object::SkuaStageObjectData<'_>),
+                    )
+                } == class
+            {
+                found.push(p);
+            }
+        });
+        let roots: HashSet<usize> = arena.skua_root_edges().into_iter().collect();
+        let Some(&start) = found.last() else {
+            return format!("no live {class}");
+        };
+        // Layered BFS upwards: each layer rescans the heap for objects pointing into the frontier.
+        let mut prev: HashMap<usize, usize> = HashMap::new();
+        let mut seen: HashSet<usize> = HashSet::from([start]);
+        let mut frontier: HashSet<usize> = HashSet::from([start]);
+        let mut hit = if roots.contains(&start) {
+            Some(start)
+        } else {
+            None
+        };
+        let mut layers = 0;
+        while hit.is_none() && !frontier.is_empty() && layers < 60 {
+            layers += 1;
+            let mut next = HashSet::new();
+            arena.skua_edges(&mut |ty, p, outs| {
+                let p = p as usize;
+                for &o in outs {
+                    if frontier.contains(&o) {
+                        *held_by.entry(o).or_default() += 1;
+                        if seen.insert(p) {
+                            prev.insert(p, o);
+                            types.insert(p, ty);
+                            next.insert(p);
+                        }
+                    }
+                }
+            });
+            hit = next.iter().copied().find(|p| roots.contains(p));
+            frontier = next;
+        }
+        let mut out = vec![format!(
+            "{} live {class}; {layers} layers; shortest root path from the oldest:",
+            found.len()
+        )];
+        match hit {
+            None => out.push("not reachable from the root (collectable?)".into()),
+            Some(mut n) => {
+                let mut path = vec![n];
+                while let Some(&c) = prev.get(&n) {
+                    path.push(c);
+                    n = c;
+                }
+                out.push("ROOT".into());
+                for p in path {
+                    let ty = types.get(&p).copied().unwrap_or("(start)");
+                    let name = if p == start {
+                        format!("as3:[display] {class}")
+                    } else {
+                        name_of(ty, p)
+                    };
+                    out.push(format!(
+                        "  -> {name} (held by {})",
+                        held_by.get(&p).copied().unwrap_or(0)
+                    ));
+                }
+            }
+        }
+        out.join("\n")
+    }
+
     /// skua #13 instrumentation: a full collection, including the library finalization pass.
     pub fn skua_full_gc(&mut self) {
         self.collect_all_garbage();
