@@ -2609,6 +2609,21 @@ impl Player {
         self.collect_garbage(true);
     }
 
+    /// skua #13 instrumentation: JSON with GC object count and movie library totals.
+    pub fn skua_mem_stats(&mut self) -> String {
+        let gc = self.gc_arena.borrow().metrics().total_gc_count();
+        let (movies, chars, swf_bytes, classes) =
+            self.mutate_with_update_context(|ctx| ctx.library.skua_stats());
+        format!(
+            "\"gcObjects\":{gc},\"movies\":{movies},\"characters\":{chars},\"swfBytes\":{swf_bytes},\"classRegistry\":{classes}"
+        )
+    }
+
+    /// skua #13 instrumentation: a full collection, including the library finalization pass.
+    pub fn skua_full_gc(&mut self) {
+        self.collect_all_garbage();
+    }
+
     pub fn flush_shared_objects(&mut self) {
         self.update(|context| {
             if let Some(mut avm1_activation) =

@@ -901,6 +901,17 @@ impl<'gc> Library<'gc> {
         self.library_for_movie(movie)?.loader_info?.upgrade(mc)
     }
 
+    /// skua #13 instrumentation: (movie libraries, characters, SWF bytes, AVM2 class registry entries).
+    pub fn skua_stats(&self) -> (usize, usize, usize, usize) {
+        let (mut n, mut chars, mut bytes) = (0, 0, 0);
+        for (movie, lib) in self.movie_libraries.0.iter() {
+            n += 1;
+            chars += lib.characters.len();
+            bytes += movie.data().len();
+        }
+        (n, chars, bytes, self.avm2_class_registry.class_map.len())
+    }
+
     /// Marks `movie` as the movie the player was started with, whose library
     /// is never released. See [`Pin::Root`].
     pub fn set_root_movie(&mut self, movie: SwfMovie<'gc>) {

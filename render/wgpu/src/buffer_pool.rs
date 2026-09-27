@@ -55,6 +55,18 @@ impl TexturePool {
         }
     }
 
+    /// skua #13 instrumentation: (sizes, idle textures, idle bytes).
+    pub fn skua_stats(&self) -> (usize, usize, u64) {
+        let (mut n, mut bytes) = (0, 0u64);
+        for (k, pool) in &self.pools {
+            let c = pool.available.lock().unwrap().len();
+            n += c;
+            bytes +=
+                c as u64 * k.size.width as u64 * k.size.height as u64 * 4 * k.sample_count as u64;
+        }
+        (self.pools.len(), n, bytes)
+    }
+
     pub fn get_texture(
         &mut self,
         descriptors: &Descriptors,

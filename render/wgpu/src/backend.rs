@@ -376,6 +376,25 @@ impl<T: RenderTarget> WgpuRenderBackend<T> {
         }
     }
 
+    /// skua #13 instrumentation: JSON fields for the texture pools and wgpu's internal counters.
+    pub fn skua_mem_stats(&self) -> String {
+        let (ks, kn, kb) = self.texture_pool.skua_stats();
+        let (os, on, ob) = self.offscreen_texture_pool.skua_stats();
+        let c = self.descriptors.device.get_internal_counters();
+        format!(
+            "\"poolSizes\":{ks},\"poolTex\":{kn},\"poolMB\":{},\"offPoolSizes\":{os},\"offPoolTex\":{on},\"offPoolMB\":{},\"halTextures\":{},\"halTexMB\":{},\"halBuffers\":{},\"halBufMB\":{},\"halEncoders\":{},\"halBindGroups\":{},\"halAllocs\":{}",
+            kb / 1_000_000,
+            ob / 1_000_000,
+            c.hal.textures.read(),
+            c.hal.texture_memory.read() / 1_000_000,
+            c.hal.buffers.read(),
+            c.hal.buffer_memory.read() / 1_000_000,
+            c.hal.command_encoders.read(),
+            c.hal.bind_groups.read(),
+            c.hal.memory_allocations.read(),
+        )
+    }
+
     /// skua #13: what `submit_frame` does to bound per-frame state, for a host that is not rendering:
     /// submit pending offscreen work and drop the offscreen texture pool.
     pub fn skua_trim(&mut self) {
