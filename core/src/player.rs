@@ -2619,6 +2619,53 @@ impl Player {
         )
     }
 
+    /// skua #13 census: live GC objects by Rust type (top `n` by count), as "count bytes type" lines.
+    /// Call right after `skua_full_gc` to see what is retained.
+    pub fn skua_census(&self, n: usize) -> String {
+        let mut rows = self.gc_arena.borrow().skua_census();
+        rows.sort_by(|a, b| b.1.cmp(&a.1));
+        let mut out: Vec<String> = rows
+            .iter()
+            .take(n)
+            .map(|(t, c, b)| format!("{c} {b} {t}"))
+            .collect();
+        // AS3 classes of plain and display-object AVM2 objects.
+        let mut classes: std::collections::HashMap<String, usize> = Default::default();
+        let arena = self.gc_arena.borrow();
+        unsafe {
+            arena.skua_visit(&mut |ty, p| {
+                let name = if ty
+                    .starts_with("ruffle_core::avm2::object::script_object::ScriptObjectData<")
+                {
+                    crate::avm2::object::skua_class_name(
+                        &*(p as *const crate::avm2::object::SkuaScriptObjectData<'_>),
+                    )
+                } else if ty
+                    .starts_with("ruffle_core::avm2::object::stage_object::StageObjectData<")
+                {
+                    format!(
+                        "[display] {}",
+                        crate::avm2::object::skua_stage_class_name(
+                            &*(p as *const crate::avm2::object::SkuaStageObjectData<'_>)
+                        )
+                    )
+                } else {
+                    return;
+                };
+                *classes.entry(name).or_default() += 1;
+            });
+        }
+        let mut classes: Vec<_> = classes.into_iter().collect();
+        classes.sort_by(|a, b| b.1.cmp(&a.1));
+        out.extend(
+            classes
+                .into_iter()
+                .take(n)
+                .map(|(c, k)| format!("{k} 0 as3:{c}")),
+        );
+        out.join("\n")
+    }
+
     /// skua #13 instrumentation: a full collection, including the library finalization pass.
     pub fn skua_full_gc(&mut self) {
         self.collect_all_garbage();

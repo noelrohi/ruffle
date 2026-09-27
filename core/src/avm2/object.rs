@@ -150,6 +150,9 @@ pub use crate::avm2::object::script_object::{
     ScriptObject, ScriptObjectData, ScriptObjectHandle, ScriptObjectWeak, ScriptObjectWrapper,
     get_dynamic_property, scriptobject_allocator,
 };
+pub use crate::avm2::object::script_object::{
+    ScriptObjectData as SkuaScriptObjectData, skua_class_name,
+};
 pub use crate::avm2::object::security_domain_object::{
     SecurityDomainObject, SecurityDomainObjectWeak,
 };
@@ -168,6 +171,9 @@ pub use crate::avm2::object::soundtransform_object::{
     SoundTransformObject, SoundTransformObjectWeak, sound_transform_allocator,
 };
 pub use crate::avm2::object::stage_object::{StageObject, StageObjectWeak};
+pub use crate::avm2::object::stage_object::{
+    StageObjectData as SkuaStageObjectData, skua_stage_class_name,
+};
 pub use crate::avm2::object::stage3d_object::{Stage3DObject, Stage3DObjectWeak};
 pub use crate::avm2::object::stylesheet_object::{
     StyleSheetObject, StyleSheetObjectWeak, style_sheet_allocator,

@@ -108,3 +108,8 @@ impl Debug for StageObject<'_> {
             .finish()
     }
 }
+
+/// skua #13 census: the AS3 class name of a raw `StageObjectData`.
+pub fn skua_stage_class_name(data: &StageObjectData<'_>) -> String {
+    super::script_object::skua_class_name(&data.base)
+}

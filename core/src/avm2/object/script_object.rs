@@ -519,3 +519,8 @@ pub fn get_dynamic_property<'gc>(
 
     Ok(None)
 }
+
+/// skua #13 census: the AS3 class name of a raw `ScriptObjectData`.
+pub fn skua_class_name(data: &ScriptObjectData<'_>) -> String {
+    data.instance_class.name().local_name().to_string()
+}
