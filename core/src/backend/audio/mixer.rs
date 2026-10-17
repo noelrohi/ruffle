@@ -556,6 +556,12 @@ impl AudioMixer {
         Err(decoders::Error::UnhandledCompression(AudioCompression::Mp3))
     }
 
+    /// Forgets a registered sound. Instances of it that are playing keep their
+    /// own reference to its data.
+    pub fn unregister_sound(&mut self, sound: SoundHandle) {
+        self.sounds.remove(sound);
+    }
+
     /// Starts a timeline audio stream.
     pub fn start_stream(
         &mut self,
@@ -1077,6 +1083,10 @@ macro_rules! impl_audio_mixer_backend {
         #[inline]
         fn register_mp3(&mut self, data: &[u8]) -> Result<SoundHandle, DecodeError> {
             self.$mixer.register_mp3(data)
+        }
+
+        fn unregister_sound(&mut self, sound: SoundHandle) {
+            self.$mixer.unregister_sound(sound)
         }
 
         #[inline]

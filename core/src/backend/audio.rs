@@ -104,6 +104,9 @@ pub trait AudioBackend: Any {
     /// Registers MP3 audio from an external source.
     fn register_mp3(&mut self, data: &[u8]) -> Result<SoundHandle, DecodeError>;
 
+    /// Forgets a registered sound. Instances of it that are playing carry on.
+    fn unregister_sound(&mut self, sound: SoundHandle);
+
     /// Plays a sound.
     fn start_sound(
         &mut self,
@@ -291,6 +294,10 @@ impl AudioBackend for NullAudioBackend {
                 is_16_bit: true,
             },
         }))
+    }
+
+    fn unregister_sound(&mut self, sound: SoundHandle) {
+        self.sounds.remove(sound);
     }
 
     fn start_sound(

@@ -1,11 +1,13 @@
 //! Lifetime tests for the libraries of dynamically loaded movies.
 
 use ruffle_core::Player;
+use ruffle_core::backend::audio::SoundHandle;
 use ruffle_test_framework::environment::Environment;
 use ruffle_test_framework::options::TestOptions;
 use ruffle_test_framework::runner::TestStatus;
 use ruffle_test_framework::test::Test;
 use ruffle_test_framework::vfs::{PhysicalFS, VfsPath};
+use std::collections::HashSet;
 use std::thread::sleep;
 
 /// The movies the player currently holds a library for, by URL.
@@ -176,4 +178,81 @@ pub fn released_class_frees_library(
         }
         Ok(())
     })
+}
+
+fn resident_child_sounds(player: &mut Player) -> Vec<SoundHandle> {
+    player.mutate_with_update_context(|context| {
+        let children: Vec<_> = context
+            .library
+            .known_movies()
+            .filter(|movie| movie.url().ends_with("child.swf"))
+            .collect();
+        children
+            .into_iter()
+            .filter_map(|movie| context.library.library_for_movie(movie))
+            .flat_map(|library| {
+                library
+                    .characters()
+                    .keys()
+                    .filter_map(|id| library.get_sound(*id))
+                    .collect::<Vec<_>>()
+            })
+            .collect()
+    })
+}
+
+/// A released library takes the sounds it registered with the audio backend
+/// with it.
+pub fn loader_unload_unregisters_sounds(
+    environment: &impl Environment,
+) -> Result<(), libtest_mimic::Failed> {
+    let test = &Test::from_options(
+        TestOptions {
+            num_frames: Some(150),
+            output_path: "output.txt".into(),
+            ..Default::default()
+        },
+        VfsPath::new(PhysicalFS::new(
+            "tests/swfs/avm2/loader_unload_releases_sounds/",
+        )),
+        "loader_unload_releases_sounds".to_string(),
+    )?;
+
+    let mut runner = test.create_test_runner(environment)?;
+    let mut registered = HashSet::new();
+    loop {
+        let status = runner.tick()?;
+        registered.extend(resident_child_sounds(&mut runner.player().lock().unwrap()));
+        match status {
+            TestStatus::Continue => {}
+            TestStatus::Sleep(duration) => sleep(duration),
+            TestStatus::Finished => break,
+        }
+    }
+
+    let mut player = runner.player().lock().unwrap();
+    player.collect_all_garbage();
+    player.collect_all_garbage();
+    let resident = resident_child_sounds(&mut player);
+
+    if registered.len() < 10 {
+        return Err(format!(
+            "expected the ten children to register ten sounds, saw {}",
+            registered.len()
+        )
+        .into());
+    }
+    let leaked = registered
+        .iter()
+        .filter(|sound| !resident.contains(sound))
+        .filter(|sound| player.audio().get_sound_duration(**sound).is_some())
+        .count();
+    if leaked > 0 {
+        return Err(format!(
+            "{leaked} of the {} sounds of released child libraries are still registered",
+            registered.len() - resident.len(),
+        )
+        .into());
+    }
+    Ok(())
 }
