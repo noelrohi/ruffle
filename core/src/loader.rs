@@ -1560,6 +1560,7 @@ pub fn load_sound_avm2<'gc>(
         player.lock().unwrap().update(|uc| {
             let sound = sound.fetch(uc);
             let sound_object = Avm2Object::from(sound);
+            uc.audio_manager.remove_loading_sound(sound);
 
             if sound.loading_state() == SoundLoadingState::Loaded {
                 // Sound has already been loaded.

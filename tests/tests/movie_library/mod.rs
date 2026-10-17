@@ -496,6 +496,12 @@ pub fn unloading_cancels_loads(
     leaves_nothing_behind(environment, "loader_unload_cancels_loads")
 }
 
+pub fn unloading_drops_queued_sounds(
+    environment: &impl Environment,
+) -> Result<(), libtest_mimic::Failed> {
+    leaves_nothing_behind(environment, "loader_unload_and_stop_queued_sounds")
+}
+
 pub fn unloading_itself_releases_library(
     environment: &impl Environment,
 ) -> Result<(), libtest_mimic::Failed> {

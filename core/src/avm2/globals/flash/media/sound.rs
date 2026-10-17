@@ -258,6 +258,7 @@ pub fn load<'gc>(
         Request::get(url.to_string()),
     );
     activation.context.navigator.spawn_future(future);
+    activation.context.audio_manager.add_loading_sound(this);
     this.set_loading_state(SoundLoadingState::Loading);
 
     Ok(Value::Undefined)

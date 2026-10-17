@@ -9,7 +9,8 @@ use crate::movie_library::{
     loader_unload_releases_library, loader_unload_unregisters_sounds, released_class_frees_library,
     released_importer_keeps_imported_sound, requested_gc_is_postponed_not_dropped,
     retained_class_keeps_library, settled_loads_leave_the_load_manager, unloading_cancels_loads,
-    unloading_itself_releases_library, unregistered_sound_fails_to_start,
+    unloading_drops_queued_sounds, unloading_itself_releases_library,
+    unregistered_sound_fails_to_start,
 };
 use crate::shared_object::{shared_object_avm1, shared_object_avm2, shared_object_self_ref_avm1};
 use crate::weak_dictionary::weak_keys_are_collected;
@@ -171,6 +172,11 @@ fn main() {
         "unloading_itself_releases_library",
         move || unloading_itself_releases_library(&*env_clone),
     ));
+
+    let env_clone = env.clone();
+    runner.with_additional_test(Trial::test("unloading_drops_queued_sounds", move || {
+        unloading_drops_queued_sounds(&*env_clone)
+    }));
 
     let env_clone = env.clone();
     runner.with_additional_test(Trial::test("retained_class_keeps_library", move || {

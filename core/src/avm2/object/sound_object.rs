@@ -166,6 +166,18 @@ impl<'gc> SoundObject<'gc> {
         }
     }
 
+    pub fn drop_plays_queued_by(self, mc: &Mutation<'gc>, movies: &[SwfMovie<'gc>]) {
+        let mut sound_data =
+            unlock!(Gc::write(mc, self.0), SoundObjectData, sound_data).borrow_mut();
+        if let SoundData::NotLoaded { queued_plays } = &mut *sound_data {
+            queued_plays.retain(|queued| {
+                !queued
+                    .started_by
+                    .is_some_and(|movie| movies.contains(&movie))
+            });
+        }
+    }
+
     pub fn set_sound(self, context: &mut UpdateContext<'gc>, sound: SoundHandle) {
         let mut sound_data =
             unlock!(Gc::write(context.gc(), self.0), SoundObjectData, sound_data).borrow_mut();

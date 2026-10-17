@@ -332,7 +332,7 @@ impl<'gc> UpdateContext<'gc> {
 
     pub fn stop_sounds_started_by(&mut self, movies: &[SwfMovie<'gc>]) {
         self.audio_manager
-            .stop_sounds_started_by(self.audio, movies)
+            .stop_sounds_started_by(self.audio, self.gc_context, movies)
     }
 
     pub fn stop_all_sounds(&mut self) {
