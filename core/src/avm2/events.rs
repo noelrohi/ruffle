@@ -454,11 +454,15 @@ fn dispatch_event_to_target<'gc>(
     let name = evtmut.event_type();
     let use_capture = evtmut.phase() == EventPhase::Capturing;
 
-    let handlers: Vec<FunctionObject<'gc>> = dispatch_list
-        .as_dispatch_mut(mc)
-        .expect("Internal dispatch list is missing during dispatch!")
-        .iter_event_handlers(mc, name, use_capture)
-        .collect();
+    let handlers: Vec<FunctionObject<'gc>> = {
+        let mut dispatch_list = dispatch_list
+            .as_dispatch_mut(mc)
+            .expect("Internal dispatch list is missing during dispatch!");
+        dispatch_list.remove_collected_handlers(mc, name);
+        dispatch_list
+            .iter_event_handlers(mc, name, use_capture)
+            .collect()
+    };
 
     if !handlers.is_empty() {
         evtmut.set_target(real_target);
