@@ -2,6 +2,7 @@
 
 use ruffle_core::Player;
 use ruffle_core::backend::audio::SoundHandle;
+use ruffle_core::memory_report::MemoryReport;
 use ruffle_core::swf::{CharacterId, SoundEvent, SoundInfo};
 use ruffle_test_framework::environment::Environment;
 use ruffle_test_framework::options::TestOptions;
@@ -408,4 +409,39 @@ pub fn unregistered_sound_fails_to_start(
             Err(_) => Ok(()),
         }
     })
+}
+
+pub fn settled_loads_leave_the_load_manager(
+    environment: &impl Environment,
+) -> Result<(), libtest_mimic::Failed> {
+    let test = &Test::from_options(
+        TestOptions {
+            num_frames: Some(400),
+            output_path: "output.txt".into(),
+            ..Default::default()
+        },
+        VfsPath::new(PhysicalFS::new(
+            "tests/swfs/avm2/loader_cancel_in_handlers/",
+        )),
+        "loader_cancel_in_handlers".to_string(),
+    )?;
+
+    let mut runner = test.create_test_runner(environment)?;
+    loop {
+        match runner.tick()? {
+            TestStatus::Continue => {}
+            TestStatus::Sleep(duration) => sleep(duration),
+            TestStatus::Finished => break,
+        }
+    }
+
+    let pending = runner
+        .player()
+        .lock()
+        .unwrap()
+        .mutate_with_update_context(|context| MemoryReport::capture(context).pending_loaders);
+    if pending > 0 {
+        return Err(format!("{pending} settled loads are still registered").into());
+    }
+    Ok(())
 }

@@ -2299,8 +2299,10 @@ impl<'gc> MovieLoader<'gc> {
 
                 if let Some(dobj) = dobj
                     && dobj.as_movie_clip().is_none()
+                    && loader_info.fire_init_and_complete_events(uc, status, redirected)
                 {
-                    loader_info.fire_init_and_complete_events(uc, status, redirected);
+                    uc.load_manager.remove_loader(handle);
+                    return Ok(());
                 }
             }
         }
