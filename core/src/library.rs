@@ -214,8 +214,21 @@ pub struct MovieLibrary<'gc> {
     /// stay because that code can still ask for the movie's characters.
     translation_units: Vec<Avm2TranslationUnitWeak<'gc>>,
 
+    /// The movies above this one in the SWF hierarchy: the movie whose code
+    /// started this movie's load, then that movie's own ancestors, copied
+    /// when the load was set up. The list is flat so that
+    /// [`Library::movies_loaded_by`] finds every movie below a given one
+    /// without walking a chain. Held weakly so that a loaded movie never
+    /// keeps the movies above it alive.
+    ///
+    /// If the starting movie's library was already released when the load was
+    /// set up, the list holds that movie alone, and unloading a movie further
+    /// up misses this one.
     ancestors: Vec<SwfMovieWeak<'gc>>,
 
+    /// The `LoaderInfo` of the AS3 `Loader` this movie was loaded into. Held
+    /// weakly because that `LoaderInfo` holds the content, which anchors this
+    /// library: held strongly, the library would keep itself alive.
     loader_info: Option<LoaderInfoObjectWeak<'gc>>,
 
     /// Whether this library is exempt from being released. See [`Pin`].
