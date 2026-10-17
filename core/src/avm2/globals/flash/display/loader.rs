@@ -64,6 +64,17 @@ pub fn loader_allocator<'gc>(
         activation,
     )?;
 
+    let uncaught_error_events = activation
+        .avm2()
+        .classes()
+        .uncaughterrorevents
+        .construct(activation, &[])?;
+    loader.set_slot(
+        loader_slots::_UNCAUGHT_ERROR_EVENTS,
+        uncaught_error_events,
+        activation,
+    )?;
+
     Ok(loader.into())
 }
 

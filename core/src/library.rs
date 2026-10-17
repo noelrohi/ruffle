@@ -348,6 +348,11 @@ impl<'gc> MovieLibrary<'gc> {
         self.content_root = Some(root);
     }
 
+    /// The display object this movie was loaded into, while it is alive.
+    pub fn content_root(&self, mc: &Mutation<'gc>) -> Option<DisplayObject<'gc>> {
+        self.content_root.and_then(|root| root.upgrade(mc))
+    }
+
     /// Whether this library was loaded for content that is still reachable.
     ///
     /// Reported by [`crate::memory_report`]. A library whose content is gone
