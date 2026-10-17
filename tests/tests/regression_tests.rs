@@ -4,7 +4,7 @@
 
 use crate::environment::NativeEnvironment;
 use crate::external_interface::tests::{external_interface_avm1, external_interface_avm2};
-use crate::loader_cancel::loader_cancellations_are_not_errors;
+use crate::logs::{cancelled_uncaught_errors_are_logged, loader_cancellations_are_not_errors};
 use crate::movie_library::{
     loader_unload_releases_library, loader_unload_unregisters_sounds, released_class_frees_library,
     retained_class_keeps_library,
@@ -27,7 +27,7 @@ use std::thread::sleep;
 
 mod environment;
 mod external_interface;
-mod loader_cancel;
+mod logs;
 mod movie_library;
 mod shared_object;
 mod weak_dictionary;
@@ -120,6 +120,12 @@ fn main() {
     runner.with_additional_test(Trial::test(
         "loader_cancellations_are_not_errors",
         move || loader_cancellations_are_not_errors(&*env_clone),
+    ));
+
+    let env_clone = env.clone();
+    runner.with_additional_test(Trial::test(
+        "cancelled_uncaught_errors_are_logged",
+        move || cancelled_uncaught_errors_are_logged(&*env_clone),
     ));
 
     let env_clone = env.clone();

@@ -737,7 +737,9 @@ impl<'gc> Avm2<'gc> {
     /// known.
     ///
     /// The error is dispatched as an `uncaughtError` event first. A listener
-    /// that cancels it suppresses the report.
+    /// that cancels it keeps it from content's trace output, as in Flash; the
+    /// log still reports it, at WARN under the target
+    /// `ruffle_core::avm2::uncaught_cancelled`.
     #[cold]
     #[inline(never)]
     pub fn uncaught_error(
@@ -749,6 +751,13 @@ impl<'gc> Avm2<'gc> {
         if Self::dispatch_uncaught_error(activation, movie, &error)
             .is_some_and(|event| event.event().is_cancelled())
         {
+            let stringified = error.to_string(activation);
+            tracing::warn!(
+                target: "ruffle_core::avm2::uncaught_cancelled",
+                "{}: {}",
+                extra_info,
+                stringified
+            );
             return;
         }
 
