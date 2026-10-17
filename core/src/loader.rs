@@ -271,6 +271,14 @@ impl<'gc> LoadManager<'gc> {
         self.0.get_mut(handle)
     }
 
+    fn fail_if_cancelled(&self, handle: LoaderHandle) -> Result<(), Error> {
+        if self.0.contains_key(handle) {
+            Ok(())
+        } else {
+            Err(Error::Cancelled)
+        }
+    }
+
     /// Cancels the loads in flight into the `Loader` of `loader_info`.
     pub fn cancel_avm2_loads(&mut self, loader_info: LoaderInfoObject<'gc>) {
         self.0.retain(|_, loader| {
@@ -1668,7 +1676,7 @@ impl<'gc> MovieLoader<'gc> {
             }
         }
 
-        Ok(())
+        uc.load_manager.fail_if_cancelled(handle)
     }
 
     /// Load data into a movie loader.
@@ -2087,7 +2095,7 @@ impl<'gc> MovieLoader<'gc> {
             }
         }
 
-        Ok(())
+        uc.load_manager.fail_if_cancelled(handle)
     }
 
     /// Report a movie loader completion to script code.
@@ -2157,6 +2165,8 @@ impl<'gc> MovieLoader<'gc> {
                     );
                 }
             }
+
+            uc.load_manager.fail_if_cancelled(handle)?;
         }
 
         if let MovieLoaderVMData::Avm2 { loader_info, .. } = vm_data {
@@ -2202,6 +2212,8 @@ impl<'gc> MovieLoader<'gc> {
                 if !movie.unwrap().is_action_script_3() {
                     loader.insert_child_into_depth_list(uc, LOADER_INSERTED_AVM1_DEPTH, dobj);
                 }
+
+                uc.load_manager.fail_if_cancelled(handle)?;
             }
         } else if let Some(dobj) = dobj {
             // This is a load of an image into AVM1 - add it as a child of the target clip.
@@ -2262,7 +2274,9 @@ impl<'gc> MovieLoader<'gc> {
             }
         }
 
-        let loader = uc.load_manager.get_loader_mut(handle).unwrap();
+        let Some(loader) = uc.load_manager.get_loader_mut(handle) else {
+            return Err(Error::Cancelled);
+        };
         loader.loader_status = LoaderStatus::Succeeded;
 
         Ok(())
@@ -2335,7 +2349,9 @@ impl<'gc> MovieLoader<'gc> {
             }
         }
 
-        let loader = uc.load_manager.get_loader_mut(handle).unwrap();
+        let Some(loader) = uc.load_manager.get_loader_mut(handle) else {
+            return Err(Error::Cancelled);
+        };
         loader.loader_status = LoaderStatus::Failed;
 
         Ok(())
