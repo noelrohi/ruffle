@@ -333,7 +333,8 @@ impl<'gc> LoaderInfoObject<'gc> {
                 .chain(loaded)
                 .filter(|movie| *movie != *context.root_swf && Some(*movie) != caller)
                 .collect();
-            context.timers.remove_owned_by(&movies);
+            let mc = context.gc();
+            context.timers.remove_owned_by(mc, &movies);
             remove_stage_listeners_of(context, &movies);
             remove_unload_listeners_of(context, &movies, &unload_events);
         }

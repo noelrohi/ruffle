@@ -7,7 +7,8 @@
 use crate::avm1::ExecutionReason;
 use crate::avm1::{Activation, ActivationIdentifier, Object as Avm1Object, Value as Avm1Value};
 use crate::avm2::error::make_null_or_undefined_error;
-use crate::avm2::object::FunctionObject as Avm2FunctionObject;
+use crate::avm2::globals::flash::utils::timer as flash_utils_timer;
+use crate::avm2::object::{FunctionObject as Avm2FunctionObject, Object as Avm2Object};
 use crate::avm2::{
     Activation as Avm2Activation, Avm2, Error as Avm2Error, FunctionArgs, Value as Avm2Value,
 };
@@ -15,7 +16,7 @@ use crate::context::UpdateContext;
 use crate::display_object::{DisplayObject, TDisplayObject};
 use crate::string::AvmString;
 use crate::tag_utils::SwfMovie;
-use gc_arena::Collect;
+use gc_arena::{Collect, Mutation};
 use ruffle_common::duration::FloatDuration;
 use std::collections::{BinaryHeap, binary_heap::PeekMut};
 
@@ -142,7 +143,9 @@ impl<'gc> Timers<'gc> {
                         true
                     }
                 }
-                TimerCallback::Avm2Callback { closure, params } => {
+                TimerCallback::Avm2Callback {
+                    closure, params, ..
+                } => {
                     let domain = context.avm2.stage_domain();
                     let mut avm2_activation = Avm2Activation::from_domain(context, domain);
 
@@ -287,8 +290,19 @@ impl<'gc> Timers<'gc> {
     }
 
     /// Removes every timer created by the code of one of `movies`.
-    pub fn remove_owned_by(&mut self, movies: &[SwfMovie<'gc>]) {
-        self.timers.retain(|t| !movies.contains(&t.owner));
+    pub fn remove_owned_by(&mut self, mc: &Mutation<'gc>, movies: &[SwfMovie<'gc>]) {
+        self.timers.retain(|t| {
+            let owned = movies.contains(&t.owner);
+            if owned
+                && let TimerCallback::Avm2Callback {
+                    flash_timer: Some(flash_timer),
+                    ..
+                } = &t.callback
+            {
+                flash_utils_timer::mark_stopped(*flash_timer, mc);
+            }
+            !owned
+        });
     }
 
     /// Changes the delay of a timer.
@@ -399,5 +413,6 @@ pub enum TimerCallback<'gc> {
     Avm2Callback {
         closure: Option<Avm2FunctionObject<'gc>>,
         params: Vec<Avm2Value<'gc>>,
+        flash_timer: Option<Avm2Object<'gc>>,
     },
 }

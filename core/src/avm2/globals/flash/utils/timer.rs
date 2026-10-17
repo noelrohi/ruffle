@@ -4,9 +4,10 @@ use crate::avm2::Error;
 use crate::avm2::activation::Activation;
 use crate::avm2::function::FunctionArgs;
 use crate::avm2::globals::slots::flash_utils_timer as slots;
-use crate::avm2::object::TObject;
+use crate::avm2::object::{Object, TObject};
 use crate::avm2::value::Value;
 use crate::timer::TimerCallback;
+use gc_arena::Mutation;
 
 /// Implements `Timer.stop`
 pub fn stop<'gc>(
@@ -20,10 +21,14 @@ pub fn stop<'gc>(
 
     if id != -1 {
         activation.context.timers.remove(id);
-        this.set_slot(slots::_TIMER_ID, (-1).into(), activation)?;
+        mark_stopped(this, activation.gc());
     }
 
     Ok(Value::Undefined)
+}
+
+pub fn mark_stopped<'gc>(timer: Object<'gc>, mc: &Mutation<'gc>) {
+    timer.set_slot_no_coerce(slots::_TIMER_ID, (-1).into(), mc);
 }
 
 /// Implements `Timer.start`
@@ -53,6 +58,7 @@ pub fn start<'gc>(
             TimerCallback::Avm2Callback {
                 closure: Some(on_update),
                 params: vec![],
+                flash_timer: Some(this),
             },
             delay,
             false,
