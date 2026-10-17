@@ -278,11 +278,16 @@ impl<'gc> LoadManager<'gc> {
         self.0.get_mut(handle)
     }
 
+    /// Whether the load has left the manager, because it settled or was cancelled.
+    pub fn is_cancelled(&self, handle: LoaderHandle) -> bool {
+        !self.0.contains_key(handle)
+    }
+
     fn fail_if_cancelled(&self, handle: LoaderHandle) -> Result<(), Error> {
-        if self.0.contains_key(handle) {
-            Ok(())
-        } else {
+        if self.is_cancelled(handle) {
             Err(Error::Cancelled)
+        } else {
+            Ok(())
         }
     }
 
@@ -524,13 +529,13 @@ impl<'gc> LoadManager<'gc> {
             .child_by_index(0)
             .and_then(|o| o.as_movie_clip())
         {
-            movie.try_fire_loaderinfo_events(context);
+            movie.try_fire_loaderinfo_events(context, None);
         }
         let handles: Vec<_> = context.load_manager.0.iter().map(|(h, _)| h).collect();
         for handle in handles {
             if let Some(MovieLoader { target_clip, .. }) = context.load_manager.get_loader(handle)
                 && let Some(movie) = target_clip.as_movie_clip()
-                && movie.try_fire_loaderinfo_events(context)
+                && movie.try_fire_loaderinfo_events(context, Some(handle))
             {
                 context.load_manager.remove_loader(handle)
             }
@@ -2326,7 +2331,12 @@ impl<'gc> MovieLoader<'gc> {
 
                 if let Some(dobj) = dobj
                     && dobj.as_movie_clip().is_none()
-                    && loader_info.fire_init_and_complete_events(uc, status, redirected)
+                    && loader_info.fire_init_and_complete_events(
+                        uc,
+                        Some(handle),
+                        status,
+                        redirected,
+                    )
                 {
                     uc.load_manager.remove_loader(handle);
                     return Ok(());

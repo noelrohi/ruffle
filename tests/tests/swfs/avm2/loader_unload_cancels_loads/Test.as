@@ -5,7 +5,7 @@ package {
     import flash.net.URLRequest;
 
     public class Test extends Sprite {
-        private var cases:Array = [pending, window, imageInit, nestedPending];
+        private var cases:Array = [pending, window, imageInit, nestedPending, nestedInit, nestedHttpStatus];
         private var loader:Loader;
         private var unloaded:Boolean;
         private var after:Array;
@@ -22,6 +22,13 @@ package {
             for each (var type:String in [Event.INIT, Event.COMPLETE]) {
                 loader.contentLoaderInfo.addEventListener(type, function(e:Event):void {
                     if (unloaded) {
+                        after.push(e.type);
+                    }
+                });
+            }
+            for each (var nested:String in ["init", "httpStatus", "complete", "timer", "interval"]) {
+                loader.contentLoaderInfo.sharedEvents.addEventListener("nested " + nested, function(e:Event):void {
+                    if (unloaded && after.indexOf(e.type) < 0) {
                         after.push(e.type);
                     }
                 });
@@ -70,6 +77,26 @@ package {
             trace("unloadAndStop(true) in the init of a child whose own load is still pending:");
             start("child.swf");
             loader.contentLoaderInfo.addEventListener(Event.INIT, function(e:Event):void {
+                if (!unloaded) {
+                    stop(false, true);
+                }
+            });
+        }
+
+        private function nestedInit():void {
+            trace("unloadAndStop(true) in the init of a load that the child started:");
+            start("map.swf");
+            stopOn("nested init");
+        }
+
+        private function nestedHttpStatus():void {
+            trace("unloadAndStop(true) in the httpStatus of a load that the child started:");
+            start("map.swf");
+            stopOn("nested httpStatus");
+        }
+
+        private function stopOn(type:String):void {
+            loader.contentLoaderInfo.sharedEvents.addEventListener(type, function(e:Event):void {
                 if (!unloaded) {
                     stop(false, true);
                 }

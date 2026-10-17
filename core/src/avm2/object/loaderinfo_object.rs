@@ -7,7 +7,7 @@ use crate::avm2::object::{EventObject, FunctionObject, Object, StageObject, TObj
 use crate::avm2::{Avm2, Error};
 use crate::context::UpdateContext;
 use crate::display_object::{DisplayObject, TDisplayObject, TDisplayObjectContainer};
-use crate::loader::ContentType;
+use crate::loader::{ContentType, LoaderHandle};
 use crate::string::AvmString;
 use crate::tag_utils::{SwfMovie, SwfMovieData};
 use core::fmt;
@@ -108,8 +108,6 @@ pub struct LoaderInfoObjectData<'gc> {
     expose_content: Cell<bool>,
 
     errored: Cell<bool>,
-
-    load_generation: Cell<u32>,
 }
 
 impl<'gc> LoaderInfoObject<'gc> {
@@ -156,7 +154,6 @@ impl<'gc> LoaderInfoObject<'gc> {
                 content_type: Cell::new(ContentType::Unknown),
                 expose_content: Cell::new(false),
                 errored: Cell::new(false),
-                load_generation: Cell::new(0),
             },
         ));
 
@@ -221,21 +218,20 @@ impl<'gc> LoaderInfoObject<'gc> {
         self.0.complete_event_fired.set(false);
     }
 
-    fn superseded_since(self, generation: u32) -> bool {
-        self.0.load_generation.get() != generation
-    }
-
     /// Fires the 'init' and 'complete' events if they haven't been fired yet.
     /// Returns `true` if both events have been fired (either as a result of
-    /// this call, or due to a previous call), or if a handler unloaded or
-    /// reused the Loader.
+    /// this call, or due to a previous call), or if a handler cancelled
+    /// `load`, the load these events belong to (`None` for the root movie).
     pub fn fire_init_and_complete_events(
         self,
         context: &mut UpdateContext<'gc>,
+        load: Option<LoaderHandle>,
         status: u16,
         redirected: bool,
     ) -> bool {
-        let generation = self.0.load_generation.get();
+        let cancelled = |context: &UpdateContext<'gc>| {
+            load.is_some_and(|load| context.load_manager.is_cancelled(load))
+        };
         self.0.expose_content.set(true);
         if !self.0.init_event_fired.get() {
             self.0.init_event_fired.set(true);
@@ -244,7 +240,7 @@ impl<'gc> LoaderInfoObject<'gc> {
             // Right now, we fire it when downloading is fully completed.
             let init_evt = EventObject::bare_default_event(context, "init");
             Avm2::dispatch_event(context, init_evt, self.into());
-            if self.superseded_since(generation) {
+            if cancelled(context) {
                 return true;
             }
         }
@@ -269,7 +265,7 @@ impl<'gc> LoaderInfoObject<'gc> {
                         EventObject::http_status_event(&mut activation, status, redirected);
 
                     Avm2::dispatch_event(context, http_status_evt, self.into());
-                    if self.superseded_since(generation) {
+                    if cancelled(context) {
                         return true;
                     }
                 }
@@ -312,9 +308,6 @@ impl<'gc> LoaderInfoObject<'gc> {
     /// `LoaderInfo`, whatever stage it has reached.
     pub fn unload(self, context: &mut UpdateContext<'gc>) {
         context.load_manager.cancel_all_avm2_loads(self);
-        self.0
-            .load_generation
-            .set(self.0.load_generation.get().wrapping_add(1));
 
         let mut loader = self
             .0
