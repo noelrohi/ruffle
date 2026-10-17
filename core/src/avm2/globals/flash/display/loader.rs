@@ -95,7 +95,7 @@ pub fn load<'gc>(
     activation
         .context
         .load_manager
-        .cancel_avm2_loads(loader_info);
+        .cancel_all_avm2_loads(loader_info);
 
     // Unload the loader, in case something was already loaded.
     loader_info.unload(activation.context);
@@ -263,7 +263,7 @@ pub fn load_bytes<'gc>(
     activation
         .context
         .load_manager
-        .cancel_avm2_loads(loader_info);
+        .cancel_all_avm2_loads(loader_info);
 
     // Unload the loader, in case something was already loaded.
     loader_info.unload(activation.context);
@@ -343,7 +343,7 @@ pub fn close<'gc>(
     activation
         .context
         .load_manager
-        .cancel_avm2_loads(loader_info);
+        .cancel_unfinished_avm2_loads(loader_info);
 
     Ok(Value::Undefined)
 }

@@ -279,13 +279,18 @@ impl<'gc> LoadManager<'gc> {
         }
     }
 
-    /// Cancels the loads in flight into the `Loader` of `loader_info`.
-    pub fn cancel_avm2_loads(&mut self, loader_info: LoaderInfoObject<'gc>) {
+    pub fn cancel_all_avm2_loads(&mut self, loader_info: LoaderInfoObject<'gc>) {
+        self.0
+            .retain(|_, loader| !loader.is_avm2_load_into(loader_info));
+    }
+
+    pub fn cancel_unfinished_avm2_loads(&mut self, loader_info: LoaderInfoObject<'gc>) {
         self.0.retain(|_, loader| {
-            !matches!(
-                loader.vm_data,
-                MovieLoaderVMData::Avm2 { loader_info: other, .. } if Gc::ptr_eq(other.0, loader_info.0)
-            )
+            !(loader.is_avm2_load_into(loader_info)
+                && matches!(
+                    loader.loader_status,
+                    LoaderStatus::Pending | LoaderStatus::Parsing
+                ))
         });
     }
 
@@ -1642,6 +1647,13 @@ pub fn load_netstream<'gc>(
 }
 
 impl<'gc> MovieLoader<'gc> {
+    fn is_avm2_load_into(&self, loader_info: LoaderInfoObject<'gc>) -> bool {
+        matches!(
+            self.vm_data,
+            MovieLoaderVMData::Avm2 { loader_info: other, .. } if Gc::ptr_eq(other.0, loader_info.0)
+        )
+    }
+
     /// Report a movie loader start event to script code.
     fn movie_loader_start(handle: LoaderHandle, uc: &mut UpdateContext<'gc>) -> Result<(), Error> {
         let (clip, vm_data) = match uc.load_manager.get_loader(handle) {
@@ -2106,13 +2118,17 @@ impl<'gc> MovieLoader<'gc> {
         status: u16,
         redirected: bool,
     ) -> Result<(), Error> {
-        let (target_clip, vm_data, movie) = match uc.load_manager.get_loader(handle) {
+        let (target_clip, vm_data, movie) = match uc.load_manager.get_loader_mut(handle) {
             Some(Self {
                 target_clip,
                 movie,
                 vm_data,
+                loader_status,
                 ..
-            }) => (*target_clip, *vm_data, *movie),
+            }) => {
+                *loader_status = LoaderStatus::Succeeded;
+                (*target_clip, *vm_data, *movie)
+            }
             None => return Err(Error::Cancelled),
         };
 
@@ -2274,12 +2290,7 @@ impl<'gc> MovieLoader<'gc> {
             }
         }
 
-        let Some(loader) = uc.load_manager.get_loader_mut(handle) else {
-            return Err(Error::Cancelled);
-        };
-        loader.loader_status = LoaderStatus::Succeeded;
-
-        Ok(())
+        uc.load_manager.fail_if_cancelled(handle)
     }
 
     /// Report a movie loader error to script code.
