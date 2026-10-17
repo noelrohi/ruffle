@@ -341,17 +341,19 @@ impl<'gc> LoaderInfoObject<'gc> {
         }
     }
 
-    /// Unloads like [`Self::unload`], first stopping what the content runs,
-    /// as Flash documents for `Loader.unloadAndStop`: the timelines, sounds,
+    /// Unloads like [`Self::unload`], then stops what the content runs, as
+    /// Flash documents for `Loader.unloadAndStop`: the timelines, sounds,
     /// and frame and activation listeners of its display objects, and the
-    /// stage listeners, timers and loads that its code started. Every movie
-    /// that its code loaded, at any depth, goes the same way.
+    /// stage listeners, timers, loads and queued sounds that its code
+    /// started. Every movie that its code loaded, at any depth, goes the
+    /// same way, and so does what the content's own `unload` handlers start.
     pub fn unload_and_stop(self, context: &mut UpdateContext<'gc>) {
         let stream = self.loader_stream();
         let content = match stream {
             LoaderStream::Swf(_, root) => Some(root),
             LoaderStream::NotYetLoaded(_, root, _) => root,
         };
+        self.unload(context);
 
         if let Some(content) = content {
             let loaded = context
@@ -380,8 +382,6 @@ impl<'gc> LoaderInfoObject<'gc> {
             remove_stage_listeners_of(context, &movies);
             remove_unload_listeners_of(context, &movies, &unload_events);
         }
-
-        self.unload(context);
     }
 }
 
