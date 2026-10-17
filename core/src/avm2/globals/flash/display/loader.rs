@@ -311,8 +311,7 @@ pub fn unload_and_stop<'gc>(
     this: Value<'gc>,
     args: FunctionArgs<'_, 'gc>,
 ) -> Result<Value<'gc>, Error<'gc>> {
-    let caller = activation.caller_movie();
-    content_loader_info(this).unload_and_stop(activation.context, caller);
+    content_loader_info(this).unload_and_stop(activation.context);
 
     if args.get_bool(0) {
         // Flash collects immediately here. Ask the player for a full cycle at

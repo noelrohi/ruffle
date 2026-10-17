@@ -335,10 +335,7 @@ impl<'gc> LoaderInfoObject<'gc> {
     /// and frame and activation listeners of its display objects, and the
     /// stage listeners, timers and loads that its code started. Every movie
     /// that its code loaded, at any depth, goes the same way.
-    ///
-    /// The root movie and `caller`, the movie whose code asked for the
-    /// unload, keep their listeners and timers.
-    pub fn unload_and_stop(self, context: &mut UpdateContext<'gc>, caller: Option<SwfMovie<'gc>>) {
+    pub fn unload_and_stop(self, context: &mut UpdateContext<'gc>) {
         let stream = self.loader_stream();
         let content = match stream {
             LoaderStream::Swf(_, root) => Some(root),
@@ -363,10 +360,8 @@ impl<'gc> LoaderInfoObject<'gc> {
                 stop_content(context, *content, &contents, &unload_events);
             }
 
-            let movies: Vec<_> = std::iter::once(stream.movie())
-                .chain(loaded)
-                .filter(|movie| *movie != *context.root_swf && Some(*movie) != caller)
-                .collect();
+            let movies: Vec<_> = std::iter::once(stream.movie()).chain(loaded).collect();
+            debug_assert!(!movies.contains(context.root_swf));
             context.load_manager.cancel_loads_started_by(&movies);
             let mc = context.gc();
             context.timers.remove_owned_by(mc, &movies);

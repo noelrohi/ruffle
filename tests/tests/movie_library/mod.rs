@@ -446,20 +446,13 @@ pub fn settled_loads_leave_the_load_manager(
     Ok(())
 }
 
-pub fn unloading_cancels_loads(
+fn leaves_nothing_behind(
     environment: &impl Environment,
+    name: &str,
 ) -> Result<(), libtest_mimic::Failed> {
-    let test = &Test::from_options(
-        TestOptions {
-            num_frames: Some(50),
-            output_path: "output.txt".into(),
-            ..Default::default()
-        },
-        VfsPath::new(PhysicalFS::new(
-            "tests/swfs/avm2/loader_unload_cancels_loads/",
-        )),
-        "loader_unload_cancels_loads".to_string(),
-    )?;
+    let dir = VfsPath::new(PhysicalFS::new(format!("tests/swfs/avm2/{name}/")));
+    let options = TestOptions::read(&dir.join("test.toml")?)?;
+    let test = &Test::from_options(options, dir, name.to_string())?;
 
     let mut runner = test.create_test_runner(environment)?;
     loop {
@@ -486,4 +479,16 @@ pub fn unloading_cancels_loads(
         return Err(format!("unloaded movies are still resident: {unloaded:?}").into());
     }
     Ok(())
+}
+
+pub fn unloading_cancels_loads(
+    environment: &impl Environment,
+) -> Result<(), libtest_mimic::Failed> {
+    leaves_nothing_behind(environment, "loader_unload_cancels_loads")
+}
+
+pub fn unloading_itself_releases_library(
+    environment: &impl Environment,
+) -> Result<(), libtest_mimic::Failed> {
+    leaves_nothing_behind(environment, "loader_unload_and_stop_self")
 }
