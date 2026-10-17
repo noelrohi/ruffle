@@ -11,6 +11,7 @@ use crate::backend::audio::{AudioManager, SoundHandle};
 use crate::context::UpdateContext;
 use crate::display_object::SoundTransform;
 use crate::string::AvmString;
+use crate::tag_utils::SwfMovie;
 use core::fmt;
 use gc_arena::barrier::unlock;
 use gc_arena::{
@@ -113,6 +114,7 @@ pub struct QueuedPlay<'gc> {
     pub sound_transform: Option<SoundTransform>,
     pub sound_channel: SoundChannelObject<'gc>,
     pub position: f64,
+    pub started_by: Option<SwfMovie<'gc>>,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -293,7 +295,7 @@ fn play_queued<'gc>(
     ) {
         queued.sound_channel.set_sound_instance(context, instance);
 
-        context.attach_avm2_sound_channel(instance, queued.sound_channel);
+        context.attach_avm2_sound_channel(instance, queued.sound_channel, queued.started_by);
     }
 
     true

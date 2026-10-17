@@ -177,6 +177,7 @@ pub fn play<'gc>(
             sound_info,
             sound_transform,
             sound_channel,
+            started_by: activation.caller_movie(),
         };
         if sound_object.play(queued_play, activation) {
             return Ok(sound_channel.into());

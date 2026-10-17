@@ -6,6 +6,7 @@ use crate::{
     context::UpdateContext,
     display_object::{self, DisplayObject, MovieClip, TDisplayObject},
     string::AvmString,
+    tag_utils::SwfMovie,
 };
 use gc_arena::Collect;
 pub use ruffle_common::buffer::Substream;
@@ -528,6 +529,7 @@ impl<'gc> AudioManager<'gc> {
                 transform: display_object::SoundTransform::default(),
                 avm1_object,
                 avm2_object: None,
+                started_by: None,
                 stream_start_frame: None,
             };
 
@@ -547,6 +549,7 @@ impl<'gc> AudioManager<'gc> {
         &mut self,
         instance: SoundInstanceHandle,
         avm2_object: SoundChannelObject<'gc>,
+        started_by: Option<SwfMovie<'gc>>,
     ) {
         if let Some(i) = self
             .sounds
@@ -555,6 +558,7 @@ impl<'gc> AudioManager<'gc> {
         {
             let instance = &mut self.sounds[i];
             instance.avm2_object = Some(avm2_object);
+            instance.started_by = started_by;
         }
     }
 
@@ -628,6 +632,24 @@ impl<'gc> AudioManager<'gc> {
         });
     }
 
+    pub fn stop_sounds_started_by(
+        &mut self,
+        audio: &mut dyn AudioBackend,
+        movies: &[SwfMovie<'gc>],
+    ) {
+        self.sounds.retain(|sound| {
+            if sound
+                .started_by
+                .is_some_and(|movie| movies.contains(&movie))
+            {
+                audio.stop_sound(sound.instance);
+                false
+            } else {
+                true
+            }
+        });
+    }
+
     pub fn stop_all_sounds(&mut self, audio: &mut dyn AudioBackend) {
         self.sounds.clear();
         audio.stop_all_sounds();
@@ -658,6 +680,7 @@ impl<'gc> AudioManager<'gc> {
                 transform: display_object::SoundTransform::default(),
                 avm1_object: None,
                 avm2_object: None,
+                started_by: None,
                 stream_start_frame: Some(clip_frame),
             };
             audio.set_sound_transform(handle, self.transform_for_sound(&instance));
@@ -684,6 +707,7 @@ impl<'gc> AudioManager<'gc> {
                 transform: display_object::SoundTransform::default(),
                 avm1_object: None,
                 avm2_object: None,
+                started_by: None,
                 stream_start_frame: None,
             };
             audio.set_sound_transform(handle, self.transform_for_sound(&instance));
@@ -924,6 +948,8 @@ pub struct SoundInstance<'gc> {
 
     /// The AVM2 `SoundChannel` object associated with this sound, if any.
     avm2_object: Option<SoundChannelObject<'gc>>,
+
+    started_by: Option<SwfMovie<'gc>>,
 
     stream_start_frame: Option<u16>,
 }

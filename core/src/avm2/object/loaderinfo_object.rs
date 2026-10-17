@@ -381,6 +381,7 @@ impl<'gc> LoaderInfoObject<'gc> {
             let movies: Vec<_> = std::iter::once(stream.movie()).chain(loaded).collect();
             debug_assert!(!movies.contains(context.root_swf));
             context.load_manager.cancel_loads_started_by(&movies);
+            context.stop_sounds_started_by(&movies);
             let mc = context.gc();
             context.timers.remove_owned_by(mc, &movies);
             remove_stage_listeners_of(context, &movies);
