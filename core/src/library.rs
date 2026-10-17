@@ -226,8 +226,6 @@ pub struct MovieLibrary<'gc> {
     /// libraries are dropped.
     kept: bool,
 
-    defined_sounds: Vec<SoundHandle>,
-
     /// Bytes of non-garbage-collected memory this library keeps alive: the
     /// movie's own SWF data plus the still-compressed source of every bitmap it
     /// has registered.
@@ -281,7 +279,6 @@ impl<'gc> MovieLibrary<'gc> {
             translation_units: Vec::new(),
             ancestors: Vec::new(),
             loader_info: None,
-            defined_sounds: Vec::new(),
             pin: Pin::None,
             kept: false,
         }
@@ -432,9 +429,13 @@ impl<'gc> MovieLibrary<'gc> {
         }
     }
 
-    pub fn register_defined_sound(&mut self, id: CharacterId, sound: SoundHandle) {
-        self.defined_sounds.push(sound);
-        self.register_character(id, Character::Sound(sound));
+    fn sounds(&self) -> impl Iterator<Item = SoundHandle> + '_ {
+        self.characters
+            .values()
+            .filter_map(|character| match character {
+                Character::Sound(sound) => Some(*sound),
+                _ => None,
+            })
     }
 
     /// Registers an export name for a given character ID.
@@ -746,17 +747,26 @@ impl<'gc> MovieLibraries<'gc> {
     /// Returns the number of libraries dropped.
     fn drop_unneeded(&mut self, fc: &Finalization<'gc>, audio: &mut dyn AudioBackend) -> usize {
         let before = self.0.len();
+        let mut released_sounds = FnvHashSet::default();
         self.0.retain(|_, library| {
             if library.is_pinned() || std::mem::take(&mut library.kept) {
                 library.remove_dead_translation_units(fc);
                 true
             } else {
-                for sound in &library.defined_sounds {
-                    audio.unregister_sound(*sound);
-                }
+                released_sounds.extend(library.sounds());
                 false
             }
         });
+        if !released_sounds.is_empty() {
+            for library in self.0.values() {
+                for sound in library.sounds() {
+                    released_sounds.remove(&sound);
+                }
+            }
+            for sound in released_sounds {
+                audio.unregister_sound(sound);
+            }
+        }
         before - self.0.len()
     }
 

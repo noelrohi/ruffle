@@ -1,3 +1,4 @@
-importer loaded
-importer unloaded
+importer.swf loaded
+exporter.swf loaded
+importer and exporter unloaded
 done
