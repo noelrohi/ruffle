@@ -210,6 +210,13 @@ pub enum Error {
     ParseIntError(#[from] std::num::ParseIntError),
 }
 
+fn ok_if_cancelled(result: Result<(), Error>) -> Result<(), Error> {
+    match result {
+        Err(Error::Cancelled) => Ok(()),
+        result => result,
+    }
+}
+
 impl From<crate::avm1::Error<'_>> for Error {
     fn from(error: crate::avm1::Error<'_>) -> Self {
         Error::Avm1Error(error.to_string())
@@ -358,7 +365,8 @@ impl<'gc> LoadManager<'gc> {
         };
         let handle = self.add_loader(loader);
         let loader = self.get_loader_mut(handle).unwrap();
-        loader.movie_loader(player, request, loader_url)
+        let future = loader.movie_loader(player, request, loader_url);
+        Box::pin(async move { ok_if_cancelled(future.await) })
     }
 
     pub fn load_asset_movie(
@@ -454,7 +462,9 @@ impl<'gc> LoadManager<'gc> {
             movie: None,
         };
         let handle = context.load_manager.add_loader(loader);
-        MovieLoader::movie_loader_bytes(handle, context, loader_url, bytes)
+        ok_if_cancelled(MovieLoader::movie_loader_bytes(
+            handle, context, loader_url, bytes,
+        ))
     }
 
     /// Fires the `onLoad` listener event for every MovieClip that has been
@@ -504,6 +514,7 @@ impl<'gc> LoadManager<'gc> {
             if matches!(status, Some(LoaderStatus::Parsing)) {
                 match MovieLoader::preload_tick(handle, context, limit, 0, false) {
                     Ok(f) => did_finish = did_finish && f,
+                    Err(Error::Cancelled) => {}
                     Err(e) => tracing::error!("Error encountered while preloading movie: {}", e),
                 }
             }
@@ -1885,9 +1896,13 @@ impl<'gc> MovieLoader<'gc> {
                         )?;
                         uc.post_frame_callbacks.push(PostFrameCallback {
                             callback: Box::new(move |uc, dobj: DisplayObject<'_>| {
-                                if let Err(e) =
-                                    MovieLoader::movie_loader_complete(handle, uc, Some(dobj), 0, false)
-                                {
+                                if let Err(e) = ok_if_cancelled(MovieLoader::movie_loader_complete(
+                                    handle,
+                                    uc,
+                                    Some(dobj),
+                                    0,
+                                    false,
+                                )) {
                                     tracing::error!("Error finishing loading of Loader.loadBytes movie {dobj:?}: {e:?}");
                                 }
                             }),
@@ -1983,13 +1998,13 @@ impl<'gc> MovieLoader<'gc> {
                         callback: Box::new(move |uc, bitmap_obj| {
                             uc.post_frame_callbacks.push(PostFrameCallback {
                                 callback: Box::new(move |uc, bitmap_obj| {
-                                    if let Err(e) = MovieLoader::movie_loader_complete(
+                                    if let Err(e) = ok_if_cancelled(MovieLoader::movie_loader_complete(
                                         handle,
                                         uc,
                                         Some(bitmap_obj),
                                         status,
                                         redirected,
-                                    ) {
+                                    )) {
                                         tracing::error!("Error finishing loading of Loader.loadBytes image {bitmap_obj:?}: {e:?}");
                                     }
                                 }),

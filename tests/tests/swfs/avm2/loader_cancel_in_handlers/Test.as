@@ -12,10 +12,12 @@ package {
 
     public class Test extends Sprite {
         private static const CONTENT:Object = {
-            swf: "a.swf", image: "image.png", missing: "missing.swf", unknown: "bad.txt"
+            swf: "a.swf", image: "image.png", missing: "missing.swf", unknown: "bad.txt",
+            "swf bytes": "a.swf", "image bytes": "image.png"
         };
         private static const RELOAD:Object = {
-            swf: "b.swf", image: "image.png", missing: "b.swf", unknown: "b.swf"
+            swf: "b.swf", image: "image.png", missing: "b.swf", unknown: "b.swf",
+            "swf bytes": "b.swf", "image bytes": "image.png"
         };
 
         private var cases:Array = [];
@@ -24,16 +26,18 @@ package {
         private var frames:int = 0;
 
         public function Test() {
-            for each (var kind:String in ["swf", "image"]) {
+            for each (var kind:String in ["swf", "image", "swf bytes", "image bytes"]) {
                 for each (var event:String in [Event.INIT, Event.COMPLETE, ProgressEvent.PROGRESS]) {
                     addCases(kind, event);
                 }
             }
             addCases("missing", IOErrorEvent.IO_ERROR);
             addCases("unknown", IOErrorEvent.IO_ERROR);
-            fetch("b.swf", function():void {
-                fetch("image.png", function():void {
-                    addEventListener(Event.ENTER_FRAME, onFrame);
+            fetch("a.swf", function():void {
+                fetch("b.swf", function():void {
+                    fetch("image.png", function():void {
+                        addEventListener(Event.ENTER_FRAME, onFrame);
+                    });
                 });
             });
         }
@@ -72,7 +76,11 @@ package {
                 });
             }
             addChild(loader);
-            loader.load(new URLRequest(CONTENT[c.kind]));
+            if (c.kind.indexOf("bytes") != -1) {
+                loader.loadBytes(bytes[CONTENT[c.kind]]);
+            } else {
+                loader.load(new URLRequest(CONTENT[c.kind]));
+            }
         }
 
         private function act(c:Object):void {
