@@ -1,4 +1,4 @@
-`Loader.unloadAndStop` as Flash documents it.
+`Loader.unloadAndStop` as Flash documents it. The expected output follows Adobe's documentation; no Flash Player trace was available. That the parent's own `enterFrame` listener on the child's content goes too is one reading of it.
 
 Built with Apache Flex SDK 4.16.1 and playerglobal 32.0:
 
