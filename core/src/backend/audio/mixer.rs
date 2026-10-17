@@ -589,7 +589,10 @@ impl AudioMixer {
         sound_handle: SoundHandle,
         settings: &swf::SoundInfo,
     ) -> Result<SoundInstanceHandle, DecodeError> {
-        let sound = &self.sounds[sound_handle];
+        let sound = self
+            .sounds
+            .get(sound_handle)
+            .ok_or(DecodeError::UnregisteredSound)?;
         let data = Cursor::new(ArcAsRef(Arc::clone(&sound.data)));
         // Create a stream that decodes and resamples the sound.
         let stream = if sound.skip_sample_frames == 0

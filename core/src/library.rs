@@ -221,6 +221,8 @@ pub struct MovieLibrary<'gc> {
     /// libraries are dropped.
     kept: bool,
 
+    defined_sounds: Vec<SoundHandle>,
+
     /// Bytes of non-garbage-collected memory this library keeps alive: the
     /// movie's own SWF data plus the still-compressed source of every bitmap it
     /// has registered.
@@ -272,6 +274,7 @@ impl<'gc> MovieLibrary<'gc> {
             avm2_domain: None,
             content_root: None,
             translation_units: Vec::new(),
+            defined_sounds: Vec::new(),
             pin: Pin::None,
             kept: false,
         }
@@ -418,6 +421,11 @@ impl<'gc> MovieLibrary<'gc> {
                 false
             }
         }
+    }
+
+    pub fn register_defined_sound(&mut self, id: CharacterId, sound: SoundHandle) {
+        self.defined_sounds.push(sound);
+        self.register_character(id, Character::Sound(sound));
     }
 
     /// Registers an export name for a given character ID.
@@ -734,10 +742,8 @@ impl<'gc> MovieLibraries<'gc> {
                 library.remove_dead_translation_units(fc);
                 true
             } else {
-                for character in library.characters.values() {
-                    if let Character::Sound(sound) = character {
-                        audio.unregister_sound(*sound);
-                    }
+                for sound in &library.defined_sounds {
+                    audio.unregister_sound(*sound);
                 }
                 false
             }

@@ -32,6 +32,9 @@ mod decoders {
     pub enum Error {
         #[error("Too many sounds are playing")]
         TooManySounds,
+
+        #[error("The sound is not registered")]
+        UnregisteredSound,
     }
 }
 
@@ -305,10 +308,11 @@ impl AudioBackend for NullAudioBackend {
         sound: SoundHandle,
         sound_info: &swf::SoundInfo,
     ) -> Result<SoundInstanceHandle, DecodeError> {
-        let length = self
+        let sound = self
             .sounds
             .get(sound)
-            .map(|s| s.duration)
+            .ok_or(DecodeError::UnregisteredSound)?;
+        let length = Some(sound.duration)
             .filter(|d| *d > FloatDuration::ZERO)
             .map(|d| {
                 Duration::from_secs_f64(

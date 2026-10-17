@@ -2,12 +2,14 @@
 
 use ruffle_core::Player;
 use ruffle_core::backend::audio::SoundHandle;
+use ruffle_core::swf::{CharacterId, SoundEvent, SoundInfo};
 use ruffle_test_framework::environment::Environment;
 use ruffle_test_framework::options::TestOptions;
 use ruffle_test_framework::runner::TestStatus;
 use ruffle_test_framework::test::Test;
 use ruffle_test_framework::vfs::{PhysicalFS, VfsPath};
 use std::collections::HashSet;
+use std::sync::{Arc, Mutex};
 use std::thread::sleep;
 
 /// The movies the player currently holds a library for, by URL.
@@ -302,4 +304,108 @@ pub fn requested_gc_is_postponed_not_dropped(
         .into());
     }
     Ok(())
+}
+
+const BEEP: CharacterId = 1;
+
+const EVENT_SOUND: SoundInfo = SoundInfo {
+    event: SoundEvent::Event,
+    in_sample: None,
+    out_sample: None,
+    num_loops: 1,
+    envelope: None,
+};
+
+/// Runs `loader_unload_keeps_imported_sounds` with `audio` options, collects,
+/// and returns the player with the sound `asset.swf` defined.
+fn sound_of_released_importer(
+    environment: &impl Environment,
+    options: TestOptions,
+    dir: VfsPath,
+) -> Result<(Arc<Mutex<Player>>, SoundHandle), String> {
+    let test = &Test::from_options(
+        options,
+        dir,
+        "loader_unload_keeps_imported_sounds".to_string(),
+    )
+    .map_err(|error| error.to_string())?;
+    let mut runner = test
+        .create_test_runner(environment)
+        .map_err(|error| error.to_string())?;
+    loop {
+        match runner.tick().map_err(|error| error.to_string())? {
+            TestStatus::Continue => {}
+            TestStatus::Sleep(duration) => sleep(duration),
+            TestStatus::Finished => break,
+        }
+    }
+
+    let player = runner.player().clone();
+    let mut locked = player.lock().unwrap();
+    locked.collect_all_garbage();
+    locked.collect_all_garbage();
+    let (importer_resident, sound) = locked.mutate_with_update_context(|context| {
+        let movies: Vec<_> = context.library.known_movies().collect();
+        let importer_resident = movies
+            .iter()
+            .any(|movie| movie.url().ends_with("importer.swf"));
+        let sound = movies
+            .iter()
+            .find(|movie| movie.url().ends_with("asset.swf"))
+            .and_then(|movie| context.library.library_for_movie(*movie))
+            .and_then(|library| library.get_sound(BEEP));
+        (importer_resident, sound)
+    });
+    drop(locked);
+
+    if importer_resident {
+        return Err("the importer's library was not released".into());
+    }
+    let sound = sound.ok_or("asset.swf's library has no sound")?;
+    Ok((player, sound))
+}
+
+fn on_mixer_and_null_audio(
+    environment: &impl Environment,
+    check: impl Fn(&mut Player, SoundHandle) -> Result<(), String>,
+) -> Result<(), libtest_mimic::Failed> {
+    let dir = VfsPath::new(PhysicalFS::new(
+        "tests/swfs/avm2/loader_unload_keeps_imported_sounds/",
+    ));
+    let mixer = TestOptions::read(&dir.join("test.toml")?)?;
+    let null = TestOptions {
+        num_frames: mixer.num_frames,
+        output_path: "output.txt".into(),
+        ..Default::default()
+    };
+    for (backend, options) in [("mixer", mixer), ("null", null)] {
+        sound_of_released_importer(environment, options, dir.clone())
+            .and_then(|(player, sound)| check(&mut player.lock().unwrap(), sound))
+            .map_err(|error| format!("{backend} audio backend: {error}"))?;
+    }
+    Ok(())
+}
+
+pub fn released_importer_keeps_imported_sound(
+    environment: &impl Environment,
+) -> Result<(), libtest_mimic::Failed> {
+    on_mixer_and_null_audio(environment, |player, sound| {
+        player
+            .audio_mut()
+            .start_sound(sound, &EVENT_SOUND)
+            .map(|_| ())
+            .map_err(|error| format!("the sound imported from asset.swf no longer starts: {error}"))
+    })
+}
+
+pub fn unregistered_sound_fails_to_start(
+    environment: &impl Environment,
+) -> Result<(), libtest_mimic::Failed> {
+    on_mixer_and_null_audio(environment, |player, sound| {
+        player.audio_mut().unregister_sound(sound);
+        match player.audio_mut().start_sound(sound, &EVENT_SOUND) {
+            Ok(_) => Err("a sound that is no longer registered started".into()),
+            Err(_) => Ok(()),
+        }
+    })
 }
