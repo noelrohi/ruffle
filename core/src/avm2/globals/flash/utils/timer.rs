@@ -48,6 +48,7 @@ pub fn start<'gc>(
         // Note - we deliberately do *not* check if currentCount is less than repeatCount.
         // Calling 'start' on a timer that has currentCount >= repeatCount will tick exactly
         // once, and then stop immediately. This is handled by Timer.onUpdate
+        let owner = activation.caller_movie_or_root();
         let id = activation.context.timers.add_timer(
             TimerCallback::Avm2Callback {
                 closure: Some(on_update),
@@ -55,6 +56,7 @@ pub fn start<'gc>(
             },
             delay,
             false,
+            owner,
         );
         this.set_slot(slots::_TIMER_ID, id.into(), activation)?;
     }

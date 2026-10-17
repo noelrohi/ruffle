@@ -6,10 +6,12 @@ use indexmap::IndexMap;
 use crate::avm2::ClassObject;
 use crate::avm2::activation::Activation;
 use crate::avm2::error::make_error_2007;
+use crate::avm2::events;
 use crate::avm2::globals::flash::display::display_object::initialize_for_allocator;
 use crate::avm2::globals::slots::flash_display_loader as loader_slots;
 use crate::avm2::globals::slots::flash_net_url_request as url_request_slots;
 use crate::avm2::globals::slots::flash_net_url_request_header as url_request_header_slots;
+use crate::avm2::object::FunctionObject;
 use crate::avm2::object::LoaderInfoObject;
 use crate::avm2::object::LoaderStream;
 use crate::avm2::object::TObject as _;
@@ -25,6 +27,7 @@ use crate::display_object::{
 };
 use crate::loader::LoadManager;
 use crate::loader::MovieLoaderVMData;
+use crate::string::AvmString;
 use crate::tag_utils::{SwfMovie, SwfMovieData};
 use ruffle_common::tag_utils::LoadBytesInfo;
 
@@ -319,10 +322,11 @@ pub fn load_bytes<'gc>(
 
 /// `Loader.unloadAndStop`
 ///
-/// Unloads like `unload`, and additionally stops the content on its way out:
-/// Flash guarantees that sounds and timelines belonging to unloaded content
-/// stop running, so that a movie which is done with an asset does not keep
-/// paying for it. The `gc` argument asks the player to reclaim the memory now
+/// Unloads like `unload`, and additionally stops the content on its way out,
+/// as Flash documents: its sounds and timelines stop, the frame and activation
+/// listeners on its display list go, and so do the stage listeners and timers
+/// that its code created. Nested Loaders get the same treatment. The `gc`
+/// argument asks the player to reclaim the memory now
 /// rather than whenever the collector next gets round to it, which is what
 /// makes repeated load/unload cycles reach a steady state instead of drifting
 /// upwards for as long as the collector stays idle.
@@ -351,7 +355,10 @@ pub fn unload_and_stop<'gc>(
         activation
             .context
             .stop_sounds_on_parent_and_children(content);
-        stop_timelines(activation.context, content);
+        stop_content(activation.context, content);
+        let movies = loaded_movies(content);
+        activation.context.timers.remove_owned_by(&movies);
+        remove_listeners_of(activation.context, &movies);
     }
 
     loader_info.unload(activation.context);
@@ -367,16 +374,66 @@ pub fn unload_and_stop<'gc>(
     Ok(Value::Undefined)
 }
 
-/// Stops every timeline in `content` and below it.
-fn stop_timelines<'gc>(context: &mut UpdateContext<'gc>, content: DisplayObject<'gc>) {
+const UNLOAD_EVENTS: [&[u8]; 6] = [
+    b"enterFrame",
+    b"exitFrame",
+    b"frameConstructed",
+    b"render",
+    b"activate",
+    b"deactivate",
+];
+
+fn is_unload_event(event: AvmString<'_>) -> bool {
+    UNLOAD_EVENTS.iter().any(|x| *x == &event)
+}
+
+fn stop_content<'gc>(context: &mut UpdateContext<'gc>, content: DisplayObject<'gc>) {
     if let Some(clip) = content.as_movie_clip() {
         clip.stop(context);
     }
 
+    if let Some(object) = content.object2() {
+        events::retain_listeners(context.gc(), object.into(), |event, _| {
+            !is_unload_event(event)
+        });
+    }
+
     if let Some(container) = content.as_container() {
         for child in container.iter_render_list() {
-            stop_timelines(context, child);
+            stop_content(context, child);
         }
+    }
+}
+
+fn loaded_movies<'gc>(content: DisplayObject<'gc>) -> Vec<SwfMovie<'gc>> {
+    let mut movies = vec![content.movie()];
+    let mut objects = vec![content];
+    while let Some(object) = objects.pop() {
+        if let Some(container) = object.as_container() {
+            for child in container.iter_render_list() {
+                if matches!(object, DisplayObject::LoaderDisplay(_)) {
+                    movies.push(child.movie());
+                }
+                objects.push(child);
+            }
+        }
+    }
+    movies
+}
+
+fn remove_listeners_of<'gc>(context: &mut UpdateContext<'gc>, movies: &[SwfMovie<'gc>]) {
+    let owned = |handler: FunctionObject<'gc>| {
+        movies.contains(&handler.executable().as_method().owner_movie())
+    };
+
+    if let Some(stage) = context.stage.object2() {
+        events::retain_listeners(context.gc(), stage.into(), |_, handler| !owned(handler));
+    }
+
+    for object in context.avm2.broadcast_listeners(context.gc()) {
+        events::retain_listeners(context.gc(), object, |event, handler| {
+            !(is_unload_event(event) && owned(handler))
+        });
     }
 }
 

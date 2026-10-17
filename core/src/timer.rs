@@ -14,6 +14,7 @@ use crate::avm2::{
 use crate::context::UpdateContext;
 use crate::display_object::{DisplayObject, TDisplayObject};
 use crate::string::AvmString;
+use crate::tag_utils::SwfMovie;
 use gc_arena::Collect;
 use ruffle_common::duration::FloatDuration;
 use std::collections::{BinaryHeap, binary_heap::PeekMut};
@@ -249,6 +250,7 @@ impl<'gc> Timers<'gc> {
         callback: TimerCallback<'gc>,
         interval: i32,
         is_timeout: bool,
+        owner: SwfMovie<'gc>,
     ) -> i32 {
         // SANITY: Set a minimum interval so we don't spam too much.
         let interval = interval.max(Self::MIN_INTERVAL) as u64 * (Self::TIMER_SCALE as u64);
@@ -259,6 +261,7 @@ impl<'gc> Timers<'gc> {
         let id = self.timer_counter;
         let timer = Timer {
             id,
+            owner,
             callback,
             tick_time: self.cur_time + interval,
             interval,
@@ -280,6 +283,11 @@ impl<'gc> Timers<'gc> {
 
     pub fn remove_all(&mut self) {
         self.timers.clear()
+    }
+
+    /// Removes every timer created by the code of one of `movies`.
+    pub fn remove_owned_by(&mut self, movies: &[SwfMovie<'gc>]) {
+        self.timers.retain(|t| !movies.contains(&t.owner));
     }
 
     /// Changes the delay of a timer.
@@ -332,6 +340,9 @@ impl Default for Timers<'_> {
 pub struct Timer<'gc> {
     /// The ID of the timer.
     id: i32,
+
+    /// The movie whose code created this timer.
+    owner: SwfMovie<'gc>,
 
     /// The callback that this timer runs when it fires.
     /// A callback is either a function object, or a parent object with a method name.
