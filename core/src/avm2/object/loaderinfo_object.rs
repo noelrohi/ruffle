@@ -293,7 +293,11 @@ impl<'gc> LoaderInfoObject<'gc> {
         self.0.content_type.set(content_type);
     }
 
+    /// Removes the Loader's content and cancels every load into this
+    /// `LoaderInfo`, whatever stage it has reached.
     pub fn unload(self, context: &mut UpdateContext<'gc>) {
+        context.load_manager.cancel_all_avm2_loads(self);
+
         let mut loader = self
             .0
             .loader
@@ -329,8 +333,8 @@ impl<'gc> LoaderInfoObject<'gc> {
     /// Unloads like [`Self::unload`], first stopping what the content runs,
     /// as Flash documents for `Loader.unloadAndStop`: the timelines, sounds,
     /// and frame and activation listeners of its display objects, and the
-    /// stage listeners and timers that its code created. Every movie that its
-    /// code loaded, at any depth, goes the same way.
+    /// stage listeners, timers and loads that its code started. Every movie
+    /// that its code loaded, at any depth, goes the same way.
     ///
     /// The root movie and `caller`, the movie whose code asked for the
     /// unload, keep their listeners and timers.
@@ -363,6 +367,7 @@ impl<'gc> LoaderInfoObject<'gc> {
                 .chain(loaded)
                 .filter(|movie| *movie != *context.root_swf && Some(*movie) != caller)
                 .collect();
+            context.load_manager.cancel_loads_started_by(&movies);
             let mc = context.gc();
             context.timers.remove_owned_by(mc, &movies);
             remove_stage_listeners_of(context, &movies);

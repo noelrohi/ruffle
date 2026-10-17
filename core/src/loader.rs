@@ -291,6 +291,11 @@ impl<'gc> LoadManager<'gc> {
             .retain(|_, loader| !loader.is_avm2_load_into(loader_info));
     }
 
+    pub fn cancel_loads_started_by(&mut self, movies: &[SwfMovie<'gc>]) {
+        self.0
+            .retain(|_, loader| !movies.contains(&loader.started_by));
+    }
+
     pub fn cancel_unfinished_avm2_loads(&mut self, loader_info: LoaderInfoObject<'gc>) {
         self.0.retain(|_, loader| {
             !(loader.is_avm2_load_into(loader_info)

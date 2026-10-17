@@ -445,3 +445,45 @@ pub fn settled_loads_leave_the_load_manager(
     }
     Ok(())
 }
+
+pub fn unloading_cancels_loads(
+    environment: &impl Environment,
+) -> Result<(), libtest_mimic::Failed> {
+    let test = &Test::from_options(
+        TestOptions {
+            num_frames: Some(50),
+            output_path: "output.txt".into(),
+            ..Default::default()
+        },
+        VfsPath::new(PhysicalFS::new(
+            "tests/swfs/avm2/loader_unload_cancels_loads/",
+        )),
+        "loader_unload_cancels_loads".to_string(),
+    )?;
+
+    let mut runner = test.create_test_runner(environment)?;
+    loop {
+        match runner.tick()? {
+            TestStatus::Continue => {}
+            TestStatus::Sleep(duration) => sleep(duration),
+            TestStatus::Finished => break,
+        }
+    }
+
+    let mut player = runner.player().lock().unwrap();
+    player.collect_all_garbage();
+    player.collect_all_garbage();
+    let pending =
+        player.mutate_with_update_context(|context| MemoryReport::capture(context).pending_loaders);
+    if pending > 0 {
+        return Err(format!("{pending} loads of unloaded Loaders are still registered").into());
+    }
+    let unloaded: Vec<_> = resident_movies(&mut player)
+        .into_iter()
+        .filter(|url| !url.ends_with("test.swf"))
+        .collect();
+    if !unloaded.is_empty() {
+        return Err(format!("unloaded movies are still resident: {unloaded:?}").into());
+    }
+    Ok(())
+}

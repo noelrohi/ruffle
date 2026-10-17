@@ -94,11 +94,6 @@ pub fn load<'gc>(
 
     let loader_info = content_loader_info(this);
 
-    activation
-        .context
-        .load_manager
-        .cancel_all_avm2_loads(loader_info);
-
     // Unload the loader, in case something was already loaded.
     loader_info.unload(activation.context);
 
@@ -261,11 +256,6 @@ pub fn load_bytes<'gc>(
     let context = args.try_get_object(1);
 
     let loader_info = content_loader_info(this);
-
-    activation
-        .context
-        .load_manager
-        .cancel_all_avm2_loads(loader_info);
 
     // Unload the loader, in case something was already loaded.
     loader_info.unload(activation.context);
