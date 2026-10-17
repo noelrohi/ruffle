@@ -778,7 +778,7 @@ impl<'gc> Avm2<'gc> {
             .and_then(|movie| loader_info_of(activation.context, movie))
             .or_else(|| activation.context.stage.root_clip()?.loader_info())?;
 
-        let chain = uncaught_error_chain(loader_info);
+        let chain = uncaught_error_chain(activation.context, loader_info);
         let class = activation.avm2().classes().uncaughterrorevent;
         let event = EventObject::from_class_and_args(
             activation,
@@ -814,7 +814,10 @@ fn loader_info_of<'gc>(
     root?.loader_info()
 }
 
-fn uncaught_error_chain<'gc>(mut loader_info: LoaderInfoObject<'gc>) -> Vec<Object<'gc>> {
+fn uncaught_error_chain<'gc>(
+    context: &UpdateContext<'gc>,
+    mut loader_info: LoaderInfoObject<'gc>,
+) -> Vec<Object<'gc>> {
     let mut chain = vec![loader_info.uncaught_error_events()];
     while let Some(loader) = loader_info.loader() {
         chain.push(
@@ -823,11 +826,7 @@ fn uncaught_error_chain<'gc>(mut loader_info: LoaderInfoObject<'gc>) -> Vec<Obje
                 .as_object()
                 .expect("Loader allocator sets _uncaughtErrorEvents"),
         );
-        let Some(parent) = Object::from(loader)
-            .as_display_object()
-            .and_then(|loader| loader.avm2_root())
-            .and_then(|root| root.loader_info())
-        else {
+        let Some(parent) = loader_info_of(context, loader.display_object().movie()) else {
             break;
         };
         chain.push(parent.uncaught_error_events());

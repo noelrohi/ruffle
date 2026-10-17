@@ -586,19 +586,24 @@ pub fn dispatch_uncaught_error_event<'gc>(
         .chain(std::iter::once((0, EventPhase::AtTarget)))
         .chain((1..chain.len()).map(|index| (index, EventPhase::Bubbling)));
 
-    let mut previous_pair = None;
+    let mut stopped_at = None;
     for (index, phase) in steps {
-        let pair = index / 2;
         if event.event().is_propagation_stopped_immediately()
-            || (event.event().is_propagation_stopped() && previous_pair != Some(pair))
+            || stopped_at.is_some_and(|stopper| index != partner(stopper))
         {
             break;
         }
 
         event.event_mut(activation.gc()).set_phase(phase);
         dispatch_event_to_target(activation, chain[index], target, chain[index], event, false);
-        previous_pair = Some(pair);
+        if stopped_at.is_none() && event.event().is_propagation_stopped() {
+            stopped_at = Some(index);
+        }
     }
+}
+
+fn partner(index: usize) -> usize {
+    index ^ 1
 }
 
 /// Like `dispatch_event`, but does not run the Capturing and Bubbling phases,
