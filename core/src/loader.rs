@@ -39,7 +39,7 @@ use crate::tag_utils::{SwfMovie, SwfMovieData};
 use crate::vminterface::Instantiator;
 use chardetng::EncodingDetector;
 use encoding_rs::{UTF_8, WINDOWS_1252};
-use gc_arena::Collect;
+use gc_arena::{Collect, Gc};
 use indexmap::IndexMap;
 use ruffle_common::tag_utils::LoadBytesInfo;
 use ruffle_macros::istr;
@@ -269,6 +269,16 @@ impl<'gc> LoadManager<'gc> {
     /// Retrieve a loader by handle for mutation.
     pub fn get_loader_mut(&mut self, handle: LoaderHandle) -> Option<&mut MovieLoader<'gc>> {
         self.0.get_mut(handle)
+    }
+
+    /// Cancels the loads in flight into the `Loader` of `loader_info`.
+    pub fn cancel_avm2_loads(&mut self, loader_info: LoaderInfoObject<'gc>) {
+        self.0.retain(|_, loader| {
+            !matches!(
+                loader.vm_data,
+                MovieLoaderVMData::Avm2 { loader_info: other, .. } if Gc::ptr_eq(other.0, loader_info.0)
+            )
+        });
     }
 
     /// Checks if the target clip on the given handle's loader
