@@ -1,4 +1,4 @@
-A Loader's own event handlers call `load`, `loadBytes` or `close` on it: in `init`, `complete` and `progress` of a SWF and of an image, each loaded by `load` and by `loadBytes`, and in `ioError` of a missing file and of content of an unknown type. The load they supersede or close stops quietly, and the next one completes. The expected output follows Adobe's documentation of `Loader.load` and `Loader.close`; no Flash Player trace was available.
+A Loader's own event handlers call `load`, `loadBytes` or `close` on it. Once a handler reuses or closes the Loader, the old load dispatches nothing more, and the next load gets its own `httpStatus` and `complete`. The expected output follows Adobe's documentation of `Loader.load` and `Loader.close`; no Flash Player trace was available.
 
 Built with Apache Flex SDK 4.16.1 and playerglobal 32.0:
 

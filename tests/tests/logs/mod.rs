@@ -35,21 +35,15 @@ impl<S: tracing::Subscriber> tracing_subscriber::Layer<S> for Log {
 
 fn run_logged(
     environment: &impl Environment,
-    tests: &[(&str, u32)],
+    tests: &[&str],
 ) -> Result<Vec<Line>, libtest_mimic::Failed> {
     let log = Log::default();
     let subscriber = tracing_subscriber::registry().with(log.clone());
     tracing::subscriber::with_default(subscriber, || -> Result<(), libtest_mimic::Failed> {
-        for &(name, num_frames) in tests {
-            let test = &Test::from_options(
-                TestOptions {
-                    num_frames: Some(num_frames),
-                    output_path: "output.txt".into(),
-                    ..Default::default()
-                },
-                VfsPath::new(PhysicalFS::new(format!("tests/swfs/avm2/{name}/"))),
-                name.to_string(),
-            )?;
+        for &name in tests {
+            let dir = VfsPath::new(PhysicalFS::new(format!("tests/swfs/avm2/{name}/")));
+            let options = TestOptions::read(&dir.join("test.toml")?)?;
+            let test = &Test::from_options(options, dir, name.to_string())?;
             let mut runner = test.create_test_runner(environment)?;
             loop {
                 match runner.tick()? {
@@ -69,10 +63,7 @@ pub fn loader_cancellations_are_not_errors(
 ) -> Result<(), libtest_mimic::Failed> {
     let lines = run_logged(
         environment,
-        &[
-            ("loader_cancel_in_handlers", 400),
-            ("loader_reuse_and_close", 60),
-        ],
+        &["loader_cancel_in_handlers", "loader_reuse_and_close"],
     )?;
     let cancelled: Vec<_> = lines
         .iter()
@@ -95,7 +86,7 @@ const CANCELLED_IN_CHAIN_TEST: [&str; 3] = ["boom2", "boom3", "boom4"];
 pub fn cancelled_uncaught_errors_are_logged(
     environment: &impl Environment,
 ) -> Result<(), libtest_mimic::Failed> {
-    let lines = run_logged(environment, &[("uncaught_error_events_chain", 30)])?;
+    let lines = run_logged(environment, &["uncaught_error_events_chain"])?;
     let booms = |target: &str| -> Vec<&str> {
         let mut booms: Vec<_> = lines
             .iter()

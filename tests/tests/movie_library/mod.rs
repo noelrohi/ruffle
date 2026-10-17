@@ -414,17 +414,11 @@ pub fn unregistered_sound_fails_to_start(
 pub fn settled_loads_leave_the_load_manager(
     environment: &impl Environment,
 ) -> Result<(), libtest_mimic::Failed> {
-    let test = &Test::from_options(
-        TestOptions {
-            num_frames: Some(400),
-            output_path: "output.txt".into(),
-            ..Default::default()
-        },
-        VfsPath::new(PhysicalFS::new(
-            "tests/swfs/avm2/loader_cancel_in_handlers/",
-        )),
-        "loader_cancel_in_handlers".to_string(),
-    )?;
+    let dir = VfsPath::new(PhysicalFS::new(
+        "tests/swfs/avm2/loader_cancel_in_handlers/",
+    ));
+    let options = TestOptions::read(&dir.join("test.toml")?)?;
+    let test = &Test::from_options(options, dir, "loader_cancel_in_handlers".to_string())?;
 
     let mut runner = test.create_test_runner(environment)?;
     loop {

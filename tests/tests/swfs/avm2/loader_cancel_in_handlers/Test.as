@@ -2,6 +2,7 @@ package {
     import flash.display.Loader;
     import flash.display.Sprite;
     import flash.events.Event;
+    import flash.events.HTTPStatusEvent;
     import flash.events.IOErrorEvent;
     import flash.events.ProgressEvent;
     import flash.net.URLLoader;
@@ -30,6 +31,9 @@ package {
                 for each (var event:String in [Event.INIT, Event.COMPLETE, ProgressEvent.PROGRESS]) {
                     addCases(kind, event);
                 }
+            }
+            for each (kind in ["swf", "image", "missing", "unknown"]) {
+                addCases(kind, HTTPStatusEvent.HTTP_STATUS);
             }
             addCases("missing", IOErrorEvent.IO_ERROR);
             addCases("unknown", IOErrorEvent.IO_ERROR);
@@ -64,7 +68,7 @@ package {
             var acted:Boolean = false;
             c.loader = loader;
             c.after = [];
-            for each (var event:String in [Event.INIT, Event.COMPLETE, IOErrorEvent.IO_ERROR, ProgressEvent.PROGRESS]) {
+            for each (var event:String in [Event.INIT, HTTPStatusEvent.HTTP_STATUS, Event.COMPLETE, IOErrorEvent.IO_ERROR, ProgressEvent.PROGRESS]) {
                 info.addEventListener(event, function(e:Event):void {
                     if (acted && e.type != ProgressEvent.PROGRESS) {
                         c.after.push(e.type);
