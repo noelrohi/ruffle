@@ -337,7 +337,7 @@ impl<'gc> MovieClip<'gc> {
             // The root movie doesn't have a `Loader`
             // We will replace this with a `LoaderStream::Swf` later in this function
             let loader_info =
-                LoaderInfoObject::not_yet_loaded(activation, movie, None, None, false)
+                LoaderInfoObject::not_yet_loaded(activation, movie, None, None, None, false)
                     .expect("Failed to construct LoaderInfoObject");
             loader_info.set_expose_content();
             loader_info.set_content_type(ContentType::Swf);

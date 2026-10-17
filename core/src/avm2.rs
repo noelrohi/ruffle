@@ -783,11 +783,10 @@ impl<'gc> Avm2<'gc> {
         if activation.context.avm2.dispatching_uncaught_error {
             return None;
         }
-        let loader_info = movie
-            .and_then(|movie| loader_info_of(activation.context, movie))
-            .or_else(|| activation.context.stage.root_clip()?.loader_info())?;
+        let movie = movie.unwrap_or(*activation.context.root_swf);
+        let loader_info = LoaderInfoObject::of_movie(activation.context, movie)?;
 
-        let chain = uncaught_error_chain(activation.context, loader_info);
+        let chain = uncaught_error_chain(loader_info);
         let class = activation.avm2().classes().uncaughterrorevent;
         let event = EventObject::from_class_and_args(
             activation,
@@ -808,25 +807,7 @@ impl<'gc> Avm2<'gc> {
     }
 }
 
-fn loader_info_of<'gc>(
-    context: &UpdateContext<'gc>,
-    movie: SwfMovie<'gc>,
-) -> Option<LoaderInfoObject<'gc>> {
-    let root = if movie == *context.root_swf {
-        context.stage.root_clip()
-    } else {
-        context
-            .library
-            .library_for_movie(movie)?
-            .content_root(context.gc())
-    };
-    root?.loader_info()
-}
-
-fn uncaught_error_chain<'gc>(
-    context: &UpdateContext<'gc>,
-    mut loader_info: LoaderInfoObject<'gc>,
-) -> Vec<Object<'gc>> {
+fn uncaught_error_chain<'gc>(mut loader_info: LoaderInfoObject<'gc>) -> Vec<Object<'gc>> {
     let mut chain = vec![loader_info.uncaught_error_events()];
     while let Some(loader) = loader_info.loader() {
         chain.push(
@@ -835,11 +816,11 @@ fn uncaught_error_chain<'gc>(
                 .as_object()
                 .expect("Loader allocator sets _uncaughtErrorEvents"),
         );
-        let Some(parent) = loader_info_of(context, loader.display_object().movie()) else {
+        let Some(creator) = loader_info.creator() else {
             break;
         };
-        chain.push(parent.uncaught_error_events());
-        loader_info = parent;
+        chain.push(creator.uncaught_error_events());
+        loader_info = creator;
     }
     chain
 }
